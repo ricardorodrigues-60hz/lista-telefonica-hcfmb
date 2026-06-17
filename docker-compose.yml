@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: lista_backend_api
+    ports:
+      - "8085:8085"
+    volumes:
+      - ./backend:/app
+      - /app/venv # Ignora o venv local para não chocar com o do container
+    environment:
+      - DATABASE_URL=sqlite:///lista.db
+
+  frontend:
+    build: ./frontend
+    container_name: lista_frontend_pwa
+    ports:
+      - "8086:8086"
+    volumes:
+      - ./frontend:/app
+      - /app/.next
+      - /app/node_modules
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8085
+    depends_on:
+      - backend

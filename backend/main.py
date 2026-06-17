@@ -34,8 +34,8 @@ app.add_middleware(
 def startup_populate_db():
     db = next(get_db())
     # Criar usuários de teste padrão se não existirem
-    gestor_email = "gestor@hcfmb.unesp.br"
-    consultor_email = "consultor@hcfmb.unesp.br"
+    gestor_email = "gestor@unesp.br"
+    consultor_email = "consultor@unesp.br"
     
     if not db.query(Usuario).filter(Usuario.email == gestor_email).first():
         gestor = Usuario(
