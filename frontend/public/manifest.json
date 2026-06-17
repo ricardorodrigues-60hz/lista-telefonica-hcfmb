@@ -1,0 +1,18 @@
+{
+  "name": "Aciono Você - Lista Telefônica HCFMB",
+  "short_name": "Aciono Você",
+  "description": "Lista telefônica offline-first do HCFMB / UNESP",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FCFCFC",
+  "theme_color": "#008B95",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

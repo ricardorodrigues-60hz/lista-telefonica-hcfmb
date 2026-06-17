@@ -1,0 +1,191 @@
+Identidade visual
+App de saúde/hospital (UNESP/HCFMB).
+Estilo: clean, institucional, amigável, foco em legibilidade.
+Modo claro fixo (não usa dark mode na prática; userInterfaceStyle: light).
+Layout: cards brancos sobre fundo claro/cinza, header e drawer na cor da marca.
+Paleta principal
+Papel	Hex	Uso
+Primary / Brand
+#008B95
+Header, botões principais, títulos, ícones ativos, splash, ícone Android
+Primary tint suave
+#F0F9FA
+Fundo de ícones, botões secundários, destaque leve
+Texto principal
+#11181C
+Corpo de texto
+Texto secundário
+#8C8C8C
+Ícones inativos, menu inativo
+Background
+#FFFFFF
+Telas e cards
+Background página
+#FCFCFC ou #F5F5F5
+Área de conteúdo
+Cinza médio
+#666, #777, #888
+Subtítulos, hints
+Bordas
+#E0E0E0, #E5E7EB, #E6E6E6, #EEE, #EFEFEF
+Cards, inputs, divisores
+Header texto
+#FFFFFF
+Título e ícones no header
+Header menu label
+rgba(255,255,255,0.82)
+Texto "MENU"
+Dark mode (definido, pouco usado):
+
+Background: #151718
+Texto: #ECEDEE
+Primary: #008B95 (igual)
+Cores semânticas (status / feedback)
+Estado	Fundo	Texto/ícone
+Sucesso
+#E8F5E9
+#2E7D32
+Aviso
+#FFF3E0 / #FFF8E1
+#EF6C00 / #F57C00
+Erro
+#FFEBEE / #FFF0F0
+#C62828 / #FF6B6B
+Info
+#E3F2FD
+#1565C0
+Neutro
+#F3F4F6
+#6B7280
+Sim/Não (notificações)
+#4CAF50 / #F44336
+texto branco
+Link
+#0a7ea4
+—
+Painel PS (classificação):
+
+Verde: #27AE60
+Amarelo: #F2C94C
+Vermelho: #EB5757
+Laranja: #F2994A
+Azul: #2F80ED
+Não classificado: #7D7D7D
+Consultas / saúde (principal):
+
+Card consulta: #F1F8E9 (verde muito claro)
+Ícones consulta: #1b5e20, #4b7b52, #2E7D32
+Tipo sanguíneo: #d32f2f
+Alerta notificação: fundo #FFF8E1, borda #FFE082, texto #5D4037 / #795548
+Tipografia
+Fonte: system-ui (nativa por plataforma).
+Web: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif
+iOS/Android: fonte do sistema (normal / San Francisco / Roboto)
+Tamanhos:
+Título de tela: 32px bold (às vezes 26–36px)
+Subtítulo / seção: 20px semibold/bold
+Seção menor: 18px bold (weight 700)
+Corpo: 16px, line-height 24
+Labels de card: 12px uppercase, letter-spacing 0.5, opacity 0.5
+Valores: 16px semibold (600)
+Botões: 15–16px, weight 600–700
+Versão / hint: 12px, opacity 0.6–0.8
+Stats pequenos: 10px uppercase
+Pesos: 400 (normal), 500, 600, 700, 800 (nome do paciente)
+Espaçamento e layout
+Padding de tela: 20px
+Padding de card: 12–16px
+Gap entre ícone e texto no menu: 16px
+Drawer width: 280px
+Conteúdo centralizado (login): max-width: 400px
+Header drawer: padding top 60px, bottom 30px
+Bordas e cantos
+Cards: border-radius 12px (às vezes 14–16px)
+Botões: 8–10px
+Inputs/selectors: 10px
+Ícones circulares: 44×44px, radius 22px
+Dashboard header: cantos inferiores 30px (curva suave)
+Chips/badges pequenos: 6–8px
+Sombras e elevação
+Cards leves:
+shadowColor: #000
+shadowOffset: {0, 2}, shadowOpacity: 0.05, shadowRadius: 10
+elevation: 2 (Android)
+Header dashboard: shadowOpacity: 0.05, shadowRadius: 15, elevation: 4
+Estilo geral: sombra muito suave, quase flat
+Componentes
+Header (top bar)
+
+Fundo: #008B95
+Texto/ícones: branco
+Título: bold, centralizado
+Botão menu: ícone + texto "MENU" em branco semitransparente
+Drawer / sidebar
+
+Fundo: branco
+Cabeçalho drawer: #008B95 com logo e título branco
+Item ativo: fundo #008B9515 (primary + 15% alpha) + borda esquerda 4px #008B95
+Item inativo: texto/ícone #8C8C8C
+Item ativo: texto #008B95, weight 600
+Cards
+
+Fundo branco #FFFFFF
+Borda opcional: #EEE / #EFEFEF 1px
+Ícone em círculo com fundo #F0F9FA
+Botões primários
+
+Fundo: #008B95
+Texto: #FFFFFF
+Padding: 12–16px
+Border-radius: 8–10px
+Font-weight: 600–700
+Botões secundários / refresh
+
+Fundo: #F0F9FA
+Texto: #008B95
+Inputs
+
+Fundo: #FFF
+Borda: #E5E7EB 1px
+Texto: #333
+Placeholder/hint: #777
+Min-height ~48–90px (textarea maior)
+Estados de erro
+
+Container: #FFEBEE
+Texto: #C62828
+Ícones
+Biblioteca: Ionicons e Material Icons (outline no perfil, filled no menu).
+Tamanho menu: 24px
+Tamanho em cards: 22px
+Cor ativa: primary; inativa: #8C8C8C
+Tom visual (resumo para o prompt)
+Interface de app hospitalar moderno: predominância de branco e cinza claro, cor de destaque verde-azulado/teal #008B95, tipografia do sistema, cards arredondados com sombra leve, header e menu lateral na cor da marca, ícones outline em círculos com fundo #F0F9FA, badges de status com fundos pastéis (verde, laranja, vermelho, azul). Sensação de confiança, clareza e acessibilidade, sem gradientes pesados nem dark mode.
+
+CSS variables (opcional para web/desktop)
+:root {
+  --color-primary: #008B95;
+  --color-primary-soft: #F0F9FA;
+  --color-text: #11181C;
+  --color-text-muted: #8C8C8C;
+  --color-bg: #FFFFFF;
+  --color-bg-page: #FCFCFC;
+  --color-border: #E5E7EB;
+  --color-success: #2E7D32;
+  --color-success-bg: #E8F5E9;
+  --color-warning: #EF6C00;
+  --color-warning-bg: #FFF3E0;
+  --color-error: #C62828;
+  --color-error-bg: #FFEBEE;
+  --radius-card: 12px;
+  --radius-button: 8px;
+  --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.05);
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+Responsivo (desktop + mobile)
+Mobile-first: padding 20px, cards full width.
+Desktop: centralizar formulários (max-width: 400px), drawer fixo ~280px, conteúdo com margens laterais confortáveis.
+Manter mesma paleta e componentes; só ajustar largura de colunas e grid (ex.: 2 colunas de cards em telas largas).
+Se quiser, no próximo passo posso montar uma versão ainda mais curta (só 10 linhas) ou um prompt em inglês para ferramentas que preferem inglês.
+
+O logo usado na aplicação pode ser baixado ou usado diretamente   daqui: https://portal.hcfmb.unesp.br/imagem/logo.png 

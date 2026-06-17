@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="128" fill="#008B95"/>
+  <!-- Phone outline and hospital cross combination -->
+  <path d="M160 120h192v272H160z" fill="none" stroke="#ffffff" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Cross in the middle -->
+  <path d="M256 180v100M206 230h100" stroke="#ffffff" stroke-width="32" stroke-linecap="round"/>
+  <!-- Phone receiver shape at the bottom -->
+  <path d="M180 340h152" stroke="#ffffff" stroke-width="24" stroke-linecap="round"/>
+</svg>
