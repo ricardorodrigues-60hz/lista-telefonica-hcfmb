@@ -81,6 +81,20 @@ Na raiz do projeto existem dois scripts batch criados para simplificar o control
 
 ---
 
+**Com Docker Compose (iniciar / parar servidores):**
+
+- **Iniciar servidores (em background, rebuild opcional):**
+
+```bash
+docker compose up -d --build
+```
+
+- **Parar e remover containers/recursos:**
+
+```bash
+docker compose down
+```
+
 ## 🔐 Contas Padrão para Teste (Criadas automaticamente na inicialização)
 
 - **Gestor (Permissões de Escrita, Edição e Exclusão):**
