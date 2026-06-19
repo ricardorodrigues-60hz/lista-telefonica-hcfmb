@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application settings."""
     # O Pydantic Valida e Tipa automaticamente as variáveis de ambiente, garantindo que sejam do tipo correto e estejam presentes quando necessário.
-    DATABASE_URL: str  # A URL de conexão com o banco de dados, que deve ser fornecida via variável de ambiente
+    DATABASE_URL: str = "sqlite+aiosqlite:///:memory:"  # Default to in-memory sqlite for local tests
     SECRET_KEY: str = "super-secret-key-padrao-caso-nao-exista-no-env"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30

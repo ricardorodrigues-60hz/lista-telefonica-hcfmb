@@ -1,9 +1,6 @@
 from datetime import datetime, timedelta, timezone
-from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
-import bcrypt
-import asyncio
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,16 +20,17 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=Fals
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plaintext password against a bcrypt hash (blocking)."""
-    try:
-        return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
-    except Exception:
-        return False
+    """Compatibility wrapper that delegates to app.core.passwords.verify_password."""
+    from app.core.passwords import verify_password as _verify
+
+    return _verify(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
-    """Hash a password with bcrypt (blocking)."""
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    """Compatibility wrapper that delegates to app.core.passwords.get_password_hash."""
+    from app.core.passwords import get_password_hash as _hash
+
+    return _hash(password)
 
 
 def _now_utc() -> datetime:
@@ -45,7 +43,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         expire = _now_utc() + expires_delta
     else:
         expire = _now_utc() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire, "role": data.get("role") or data.get("papel")})
+    # JWT standard requires 'exp' as a numeric timestamp
+    to_encode.update({"exp": int(expire.timestamp()), "role": data.get("role") or data.get("papel")})
     # keep both keys for compatibility: 'role' is preferred but some code may use 'papel'
     if "papel" not in to_encode and data.get("papel"):
         to_encode["papel"] = data.get("papel")
@@ -56,7 +55,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 def create_refresh_token(data: dict) -> str:
     to_encode = data.copy()
     expire = _now_utc() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-    to_encode.update({"exp": expire, "refresh": True})
+    to_encode.update({"exp": int(expire.timestamp()), "refresh": True})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 

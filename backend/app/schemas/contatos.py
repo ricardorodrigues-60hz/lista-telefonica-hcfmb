@@ -33,6 +33,15 @@ class ContatoBase(BaseModel):
     tipo_numero: TipoNumero = TipoNumero.PUBLICO
 
 
+    @field_validator("telefone")
+    def validate_telefone(cls, v: str) -> str:  # type: ignore[override]
+        # Accept common phone characters but reject letters
+        if not re.match(r"^[0-9\+\(\)\s\-\.]+$", v):
+            raise ValueError("telefone inválido")
+        digits = re.sub(r"\D", "", v)
+        if len(digits) < 8:
+            raise ValueError("telefone inválido")
+        return v
 class ContatoCreate(ContatoBase):
     """Payload when client creates a new contact. Client generates UUID."""
 

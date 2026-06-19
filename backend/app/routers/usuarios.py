@@ -19,9 +19,9 @@ async def listar_usuarios(current_user=Depends(get_current_user), db: AsyncSessi
     # Gestores veem todos; consultores apenas o próprio registro
     repo = UsuarioRepository(db)
     if getattr(current_user, "papel", None) != "GESTOR":
-        return [UsuarioResponse.from_orm(current_user)]
+        return [UsuarioResponse.model_validate(current_user)]
     users = await repo.listar()
-    return [UsuarioResponse.from_orm(u) for u in users]
+    return [UsuarioResponse.model_validate(u) for u in users]
 
 
 @router.get("/{user_id}", response_model=UsuarioResponse)
@@ -32,7 +32,7 @@ async def get_usuario(user_id: int, current_user=Depends(get_current_user), db: 
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
     if getattr(current_user, "papel", None) != "GESTOR" and current_user.id != usuario.id:
         raise HTTPException(status_code=403, detail="Acesso negado")
-    return UsuarioResponse.from_orm(usuario)
+    return UsuarioResponse.model_validate(usuario)
 
 
 @router.post("/", response_model=UsuarioResponse, status_code=status.HTTP_201_CREATED)
@@ -42,7 +42,7 @@ async def criar_usuario(payload: UsuarioCreate, usuario=Depends(require_gestor),
     # hashing is blocking - use centralized async helper
     senha_hash = await async_get_password_hash(senha_plain)
     novo = await repo.criar(email=payload.email, nome=payload.nome, senha_hash=senha_hash, papel=payload.papel)
-    return UsuarioResponse.from_orm(novo)
+    return UsuarioResponse.model_validate(novo)
 
 
 @router.patch("/{user_id}", response_model=UsuarioResponse)
@@ -53,7 +53,7 @@ async def atualizar_usuario(user_id: int, payload: UsuarioCreate, usuario=Depend
     updated = await repo.atualizar(user_id, **fields)
     if not updated:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
-    return UsuarioResponse.from_orm(updated)
+    return UsuarioResponse.model_validate(updated)
 
 
 @router.post("/{user_id}/senha")

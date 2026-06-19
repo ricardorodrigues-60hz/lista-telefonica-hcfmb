@@ -1,6 +1,7 @@
 import threading
 import pytest
 from httpx import AsyncClient
+from httpx import ASGITransport
 
 from app.main import app
 
@@ -40,7 +41,7 @@ async def test_verify_password_runs_in_thread(monkeypatch):
 
     app.dependency_overrides.clear()
 
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         payload = {"login": "user@example.com", "senha": "passw"}
         r = await ac.post("/api/auth/login", json=payload)
 
@@ -80,10 +81,12 @@ async def test_get_password_hash_runs_in_thread(monkeypatch):
     monkeypatch.setattr(usuarios_mod, "UsuarioRepository", lambda db: FakeUserRepo2(db))
 
     # Override auth dependency to allow creation
-    app.dependency_overrides.clear()
-    app.dependency_overrides["require_gestor"] = lambda: DummyUserObj()
+    from app.core.auth import require_gestor
 
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    app.dependency_overrides.clear()
+    app.dependency_overrides[require_gestor] = lambda: DummyUserObj()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         payload = {"email": "n@example.com", "nome": "N", "papel": "CONSULTOR", "senha": "pw"}
         r = await ac.post("/api/usuarios/", json=payload)
 

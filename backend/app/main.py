@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import os
+import logging
 
 from app.routers import api_router
 
@@ -14,10 +16,15 @@ async def lifespan(app: FastAPI):
     # Por exemplo, inicializar o banco de dados, criar tabelas, etc.
     # Import seeds lazily to avoid import-time side effects during tests
     from app.core import init_db
-    await init_db.seeds()
+
+    # Only run seeds when explicitly enabled (useful to skip in tests/CI)
+    if os.getenv("RUN_SEEDS", "0") == "1":
+        try:
+            await init_db.seeds()
+        except Exception:
+            logging.exception("init_db.seeds() failed during startup; continuing without seeding")
+
     yield  # Continua com a execução da aplicação
-    # Código de finalização (se necessário) pode ser colocado aqui
-    pass
 
 app = FastAPI(title="Aciono Você API", version="1.0.0", lifespan=lifespan)
 

@@ -1,5 +1,6 @@
 import pytest
 from httpx import AsyncClient
+from httpx import ASGITransport
 
 from app.main import app
 
@@ -37,8 +38,11 @@ async def test_listar_usuarios_as_gestor(monkeypatch):
     fake._users = [DummyUser(id=1, email="a@example.com", nome="A", papel="GESTOR"), DummyUser(id=2, email="b@example.com", nome="B", papel="CONSULTOR")]
 
     # Override dependencies
+    from app.core.auth import get_current_user, require_gestor
+
     app.dependency_overrides.clear()
-    app.dependency_overrides["get_current_user"] = lambda: DummyUser()
+    app.dependency_overrides[get_current_user] = lambda: DummyUser()
+    app.dependency_overrides[require_gestor] = lambda: DummyUser()
     app.dependency_overrides["require_gestor"] = lambda: DummyUser()
 
     # Monkeypatch repository used in router
@@ -46,7 +50,7 @@ async def test_listar_usuarios_as_gestor(monkeypatch):
 
     monkeypatch.setattr(usuarios_mod, "UsuarioRepository", lambda db: fake)
 
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         r = await ac.get("/api/usuarios/")
     assert r.status_code == 200
     data = r.json()
@@ -58,14 +62,16 @@ async def test_listar_usuarios_as_gestor(monkeypatch):
 async def test_criar_usuario(monkeypatch):
     fake = FakeRepo()
 
+    from app.core.auth import require_gestor
+
     app.dependency_overrides.clear()
-    app.dependency_overrides["require_gestor"] = lambda: DummyUser()
+    app.dependency_overrides[require_gestor] = lambda: DummyUser()
 
     import app.routers.usuarios as usuarios_mod
     monkeypatch.setattr(usuarios_mod, "UsuarioRepository", lambda db: fake)
 
     payload = {"email": "new@example.com", "nome": "New", "papel": "CONSULTOR", "senha": "pass123"}
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         r = await ac.post("/api/usuarios/", json=payload)
 
     assert r.status_code == 201
@@ -78,13 +84,15 @@ async def test_criar_usuario(monkeypatch):
 async def test_get_usuario_not_found(monkeypatch):
     fake = FakeRepo()
 
+    from app.core.auth import get_current_user
+
     app.dependency_overrides.clear()
-    app.dependency_overrides["get_current_user"] = lambda: DummyUser()
+    app.dependency_overrides[get_current_user] = lambda: DummyUser()
 
     import app.routers.usuarios as usuarios_mod
     monkeypatch.setattr(usuarios_mod, "UsuarioRepository", lambda db: fake)
 
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         r = await ac.get("/api/usuarios/999")
 
     assert r.status_code == 404

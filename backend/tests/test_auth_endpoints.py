@@ -1,7 +1,8 @@
 import pytest
 from httpx import AsyncClient
+from httpx import ASGITransport
 
-from backend.app.main import app
+from app.main import app
 
 
 class DummyUser:
@@ -30,12 +31,13 @@ async def test_login_and_refresh(monkeypatch):
     async def fake_verify(plain, hashed):
         return True
 
-    import app.core.passwords as pw_mod
-    monkeypatch.setattr(pw_mod, "async_verify_password", fake_verify)
+    # auth router imported the helper directly; patch the router reference
+    import app.routers.auth as auth_mod2
+    monkeypatch.setattr(auth_mod2, "async_verify_password", fake_verify)
 
     app.dependency_overrides.clear()
 
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         r = await ac.post("/api/auth/login", json={"login": "user@example.com", "senha": "pw"})
 
         assert r.status_code == 200
