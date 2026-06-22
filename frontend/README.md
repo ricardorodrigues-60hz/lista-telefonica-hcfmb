@@ -1,36 +1,124 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 📞 Aciono Você — Frontend PWA
 
-## Getting Started
+> Camada de apresentação e persistência offline do sistema de Lista Telefônica Hospitalar do HCFMB · UNESP.
 
-First, run the development server:
+Esta aplicação é um Progressive Web App (PWA) desenvolvido em **Next.js 16** com **React 19**, projetado para funcionar com plena capacidade mesmo sem conexão de rede, utilizando **Dexie.js** para gerenciar o armazenamento local via IndexedDB.
+
+---
+
+## 🚀 Iniciando o Desenvolvimento
+
+### Pré-requisitos
+
+- Node.js 20 ou superior
+- npm 10 ou superior
+
+### Instalação e execução
 
 ```bash
+# Instalar dependências
+npm install
+
+# Iniciar o servidor de desenvolvimento (porta 8086)
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Acesse **http://localhost:8086** no navegador.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🏗️ Scripts Disponíveis
 
-## Learn More
+| Script | Descrição |
+|---|---|
+| `npm run dev` | Servidor de desenvolvimento com hot-reload |
+| `npm run build` | Compilação otimizada para produção |
+| `npm run start` | Serve a build de produção |
+| `npm run lint` | Verificação de qualidade de código com ESLint |
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 📁 Estrutura de Pastas
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+frontend/src/
+├── app/
+│   ├── page.tsx         # Componente principal: login, lista, CRUD, sync offline
+│   ├── layout.tsx       # Layout raiz da aplicação
+│   └── globals.css      # Design System: paleta de cores, tipografia, componentes HCFMB
+└── db/
+    └── db.ts            # Schema do Dexie.js (IndexedDB) — LocalContato, AcionoVoceDB
+```
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🔄 Lógica de Sincronização Offline
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+O frontend implementa um ciclo completo de sincronização offline-first:
+
+1. **Leitura:** `useLiveQuery` do Dexie.js mantém a UI sempre reativa ao IndexedDB local.
+2. **Escrita Offline:** Toda criação/edição/exclusão é persistida localmente com `sincronizado: false`.
+3. **Retomada Online:** O listener `window.addEventListener('online', ...)` dispara `triggerSync()` automaticamente ao recuperar a conexão.
+4. **Sincronização em Lote:** O método `triggerSync()` coleta todos os registros pendentes e envia via `POST /api/contatos/sync`.
+5. **Confirmação:** O servidor responde com `contatos_atualizados` (lista de UUIDs). O frontend marca cada um com `sincronizado: true` no Dexie.js ou remove fisicamente os soft-deletados confirmados.
+
+---
+
+## 🗄️ Schema Local (Dexie.js / IndexedDB)
+
+```typescript
+export interface LocalContato {
+  id: string;             // UUID gerado pelo cliente (crypto.randomUUID())
+  nome: string;
+  telefone: string;
+  email?: string;
+  tipo_numero: 'institucional' | 'publico';
+  atualizado_em: string;  // ISO 8601 UTC — árbitro de conflitos
+  sincronizado: boolean;  // false = alteração pendente de envio ao servidor
+  excluido: boolean;      // Soft Delete — propagado na sincronização
+}
+```
+
+> A chave `sincronizado` é **exclusiva do cliente** e não é enviada ao servidor.
+
+---
+
+## 🌐 Configuração da API
+
+A URL base da API está definida como constante em `src/app/page.tsx`:
+
+```typescript
+const API_BASE = 'http://localhost:8085/api';
+```
+
+Para produção, altere para a URL do servidor real ou exporte via variável de ambiente `NEXT_PUBLIC_API_URL`.
+
+---
+
+## 🐳 Docker (Produção)
+
+O `Dockerfile` do frontend realiza a compilação estática antes de iniciar o servidor:
+
+```dockerfile
+RUN npm run build
+CMD ["npm", "run", "start"]
+```
+
+Isso garante performance máxima e comportamento estável em ambiente hospitalar.
+
+---
+
+## 📦 Dependências Principais
+
+| Pacote | Versão | Uso |
+|---|---|---|
+| `next` | 16.2 | Framework React com App Router |
+| `react` / `react-dom` | 19 | Biblioteca de UI |
+| `dexie` | 4.4 | ORM para IndexedDB (persistência offline) |
+| `dexie-react-hooks` | 4.4 | `useLiveQuery` para reatividade ao IndexedDB |
+| `lucide-react` | 1.20 | Ícones premium |
+| `@ducanh2912/next-pwa` | 10.2 | Service Worker e manifest para PWA |
+
+---
+
+*Desenvolvido pelo Estagiário Ricardo Florentino Rodrigues em parceria com o Núcleo de Apoio à Gestão do HCFMB, Botucatu-SP*

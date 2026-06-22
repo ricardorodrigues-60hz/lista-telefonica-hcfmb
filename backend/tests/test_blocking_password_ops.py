@@ -8,6 +8,7 @@ from app.main import app
 
 class DummyUserObj:
     def __init__(self, login="user@example.com", nome="User", papel="GESTOR", senha_hash="hash"):
+        self.email = login
         self.login = login
         self.nome = nome
         self.papel = papel

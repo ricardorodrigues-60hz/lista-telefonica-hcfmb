@@ -174,7 +174,7 @@ export default function Home() {
       
       if (res.ok) {
         const result = await res.json();
-        const syncedIds = result.sincronizados || [];
+        const syncedIds = result.contatos_atualizados || [];
         
         await db.transaction('rw', db.contatos, async () => {
           for (const id of syncedIds) {
@@ -211,7 +211,7 @@ export default function Home() {
       const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: loginEmail, senha: loginPassword })
+        body: JSON.stringify({ login: loginEmail, senha: loginPassword })
       });
       
       if (res.ok) {
@@ -227,7 +227,12 @@ export default function Home() {
         localStorage.setItem('user_name', data.nome);
       } else {
         const errData = await res.json();
-        setLoginError(errData.detail || 'Falha na autenticação.');
+        const errorMsg = typeof errData.detail === 'string' 
+          ? errData.detail 
+          : (Array.isArray(errData.detail) && errData.detail.length > 0 && errData.detail[0].msg
+              ? errData.detail[0].msg
+              : 'Falha na autenticação.');
+        setLoginError(errorMsg);
       }
     } catch (err) {
       setLoginError('Não foi possível conectar ao servidor backend.');

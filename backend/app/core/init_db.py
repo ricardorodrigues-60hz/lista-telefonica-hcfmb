@@ -21,8 +21,8 @@ async def inicializar_banco():
         await db.commit()
 
 async def seed_usuarios(db: AsyncSession):
-    gestor_email = "gestor@unesp.br"
-    consultor_email = "consultor@unesp.br"
+    gestor_email = "gestor@hcfmb.unesp.br"
+    consultor_email = "consultor@hcfmb.unesp.br"
     
     res_g = await db.execute(select(Usuario).filter(Usuario.email == gestor_email))
     if not res_g.scalars().first():
@@ -84,6 +84,6 @@ async def seed_contatos(db: AsyncSession):
                 db.add(c)
 
 
-    async def seeds():
-        """Compatibility wrapper expected by app.main; initializes DB and seeds data."""
-        await inicializar_banco()
+async def seeds():
+    """Compatibility wrapper expected by app.main; initializes DB and seeds data."""
+    await inicializar_banco()

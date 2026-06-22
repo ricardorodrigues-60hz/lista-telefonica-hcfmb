@@ -132,9 +132,9 @@ class ContatoRepository:
         ids_confirmados = []
 
         for c in contatos_sync:
-            # Tratamento seguro da string ISO vinda do front-end
+            # Tratamento seguro do datetime timezone-aware vindo do schema Pydantic
             try:
-                cliente_updated_at = datetime.fromisoformat(c.atualizado_em.replace("Z", "+00:00")).replace(tzinfo=None)
+                cliente_updated_at = c.atualizado_em.astimezone(timezone.utc).replace(tzinfo=None)
             except Exception:
                 cliente_updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 

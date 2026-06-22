@@ -50,14 +50,14 @@ async def login(
         )
         
     # Injeta o login no 'sub' e o papel (role) para o controle RBAC do PWA
-    access_token = create_access_token(data={"sub": usuario.login, "role": usuario.papel})
-    refresh_token = create_refresh_token(data={"sub": usuario.login})
+    access_token = create_access_token(data={"sub": usuario.email, "role": usuario.papel})
+    refresh_token = create_refresh_token(data={"sub": usuario.email})
 
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
         token_type="bearer",
-        usuario={"nome": usuario.nome, "login": usuario.login, "papel": usuario.papel},
+        usuario={"nome": usuario.nome, "login": usuario.email, "papel": usuario.papel},
     )
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -91,12 +91,12 @@ async def refresh_token_route(
         raise credentials_exception
 
     # Aplica Token Rotation: gera novos tokens invalidando o ciclo anterior para maior segurança
-    novo_access_token = create_access_token(data={"sub": usuario.login, "role": usuario.papel})
-    novo_refresh_token = create_refresh_token(data={"sub": usuario.login})
+    novo_access_token = create_access_token(data={"sub": usuario.email, "role": usuario.papel})
+    novo_refresh_token = create_refresh_token(data={"sub": usuario.email})
 
     return TokenResponse(
         access_token=novo_access_token,
         refresh_token=novo_refresh_token,
         token_type="bearer",
-        usuario={"nome": usuario.nome, "login": usuario.login, "papel": usuario.papel},
+        usuario={"nome": usuario.nome, "login": usuario.email, "papel": usuario.papel},
     )

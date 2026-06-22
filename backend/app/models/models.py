@@ -24,12 +24,16 @@ class Contato(Base):
     
     # CRUCIAL PARA OFFLINE: Força o PostgreSQL a usar TIMESTAMP WITH TIME ZONE
     # O server_default cria a data no INSERT, o onupdate atualiza a data automaticamente no UPDATE
+    criado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now()
+    )
     atualizado_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now()
     )
-    excluido: Mapped[str] = mapped_column(Boolean, default=False)
+    excluido: Mapped[bool] = mapped_column(Boolean, default=False)
 
 class AuditTrail(Base):
     __tablename__ = "audit_trail"

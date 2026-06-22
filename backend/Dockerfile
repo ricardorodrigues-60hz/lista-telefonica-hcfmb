@@ -21,4 +21,4 @@ COPY . /app/
 EXPOSE 8085
 
 # 8. Comando para iniciar a API (host 0.0.0.0 é obrigatório para aceitar conexões externas ao container)
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8085", "--reload"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8085"]

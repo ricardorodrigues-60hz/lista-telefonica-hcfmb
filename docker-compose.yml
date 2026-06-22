@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build: ./backend
@@ -10,7 +8,8 @@ services:
       - ./backend:/app
       - /app/venv # Ignora o venv local para não chocar com o do container
     environment:
-      - DATABASE_URL=sqlite:///lista.db
+      - DATABASE_URL=sqlite+aiosqlite:///./lista.db
+      - RUN_SEEDS=1
 
   frontend:
     build: ./frontend
@@ -25,3 +24,4 @@ services:
       - NEXT_PUBLIC_API_URL=http://localhost:8085
     depends_on:
       - backend
+      
