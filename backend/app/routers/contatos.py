@@ -46,7 +46,7 @@ async def criar_editar_contato(
         ContatoResponse: O contato criado ou atualizado.
     """
     repo = ContatoRepository(db)
-    return await repo.salvar_ou_atualizar(contato_in, usuario.nome)
+    return await repo.salvar_ou_atualizar(contato_in, usuario.usuario_id_externo)
     
 @router.post("/deletar")
 async def deletar_contato(
@@ -68,7 +68,7 @@ async def deletar_contato(
         raise HTTPException(status_code=400, detail="ID do contato é obrigatório.")
 
     repo = ContatoRepository(db)
-    contato = await repo.deletar_soft(str(contato_id), usuario.nome)
+    contato = await repo.deletar_soft(str(contato_id), usuario.usuario_id_externo)
     if not contato:
         raise HTTPException(status_code=404, detail="Contato não encontrado.")
     
@@ -83,5 +83,5 @@ async def sync_contatos(
     # Endpoint inteligente de sincronização bidirecional/offline
     repo = ContatoRepository(db)
     # chama o método existente do repositório para sincronização em lote
-    ids_confirmados = await repo.sincronizar_lote_offline(payload.contatos, usuario.nome)
+    ids_confirmados = await repo.sincronizar_lote_offline(payload.contatos, usuario.usuario_id_externo)
     return SyncResponse(sucesso=True, contatos_atualizados=ids_confirmados)

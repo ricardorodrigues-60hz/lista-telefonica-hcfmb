@@ -1,156 +1,123 @@
-# Backend — Lista Telefônica (ação: novo)
+# Aciono Você - Lista Telefônica Hospitalar (Backend)
 
-> README específico para a pasta `backend` com instruções práticas de setup, execução, testes e CI.
+Este módulo constitui o backend do sistema **Aciono Você**, um submódulo de lista telefônica hospitalar de alta criticidade e disponibilidade. Projetado especificamente para operar sob o padrão **Offline-First**, o backend fornece endpoints de alta performance para sincronização bidirecional de contatos, controle de acesso e auditoria completa de alterações.
+
+O sistema foi estruturado para ser montado de forma modular (como um sub-app FastAPI via `.mount`) dentro de um portal hospitalar corporativo unificado.
 
 ---
 
-## Visão geral
+## 🏛️ Arquitetura do Sistema
 
-Este serviço fornece endpoints REST para gerenciamento de usuários e contatos.
-Principais tecnologias:
-- FastAPI
-- Pydantic v2
-- SQLAlchemy (async)
-- pytest + pytest-asyncio
+A aplicação adota boas práticas de Clean Architecture e design patterns consagrados no ecossistema Python:
 
-
-## Pré-requisitos
-
-- Python 3.11 (testado)
-- Git
-- Opcional: Docker se preferir executar via container
-
-
-## Setup local (rápido)
-
-1. Criar e ativar ambiente virtual (exemplo cross-platform):
-
-Windows PowerShell
-
-```powershell
-python -m venv .venv
-& .venv\Scripts\Activate.ps1
+```mermaid
+graph TD
+    Client[Cliente SPA/PWA] --> Routers[Routers/Endpoints FastAPI]
+    Routers --> Dependencies[Injeção de Dependências - Depends]
+    Dependencies --> Repositories[Padrão Repository]
+    Repositories --> SQLAlchemy[SQLAlchemy Async Engine]
+    SQLAlchemy --> DB[(Banco de Dados PostgreSQL)]
 ```
 
-Windows (cmd)
+### 1. Padrão Repository
+Toda a lógica de acesso a dados está encapsulada em classes Repository (como `ContatoRepository`). Isso isola a camada de apresentação/rotas das regras específicas de persistência do ORM, facilitando a testabilidade através de dublês de teste (mocks) e garantindo baixo acoplamento.
 
-```cmd
-python -m venv .venv
-.\.venv\Scripts\activate
+### 2. SQLAlchemy Assíncrono (async/await)
+Todas as operações de I/O de banco de dados utilizam a API assíncrona do SQLAlchemy 2.0 com `asyncpg`. Isso maximiza o throughput da API sob alta concorrência de requisições simultâneas.
+
+### 3. Integração Offline-First
+O backend implementa uma estratégia de **sincronização baseada em timestamp**. 
+- O cliente envia modificações locais (realizadas offline no IndexedDB) com seus respectivos timestamps de atualização (`atualizado_em`).
+- O servidor compara as datas e resolve conflitos usando a política *last-write-wins* baseada em fuso horário (UTC), aplicando as mudanças e retornando apenas os registros criados ou alterados por outros usuários desde a última sincronização do cliente.
+
+---
+
+## 🔐 Controle de Acesso e Auditoria
+
+### Tabela de Vínculo de Permissões
+A aplicação possui um modelo enxuto de usuário integrado a sistemas corporativos de SSO (Single Sign-On):
+* **Identificação:** O usuário é referenciado unicamente pelo seu `usuario_id_externo` corporativo (ex: `RI98234`).
+* **Papéis (RBAC):** Suporta os perfis `gestor` (com privilégios de escrita, edição e exclusão) e `consultor` (apenas leitura e sincronização de dados).
+
+### Trilha de Auditoria (Audit Trail)
+Qualquer operação de escrita (criação, edição ou exclusão lógica) gera um registro de auditoria imutável na tabela `audit_trails`. 
+* Registra o tipo da ação (`criar`, `atualizar`, `deletar`).
+* Armazena o ID externo do operador (`usuario_id_externo`) que realizou a ação.
+* Salva o estado dos dados modificados em formato JSON.
+
+---
+
+## ⚙️ Configuração e Montagem como Sub-app
+
+Para viabilizar a integração transparente no ecossistema do hospital, o app expõe o parâmetro `TOKEN_URL` no `config.py` e parametriza o `OAuth2PasswordBearer` dinamicamente. Desta forma, ele pode ser montado dentro de outro app FastAPI:
+
+```python
+from fastapi import FastAPI
+from app.main import app as lista_telefonica_app
+
+parent_app = FastAPI()
+
+# Montando o módulo de lista telefônica
+parent_app.mount("/lista-telefonica", lista_telefonica_app)
 ```
 
-Unix / macOS
+---
+
+## 🚀 Instalação e Execução
+
+### Pré-requisitos
+* Python 3.11+
+* Docker e Docker Compose (opcional)
+
+### Execução Local com Virtualenv
+
+1. Instale as dependências:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # Ou .\.venv\Scripts\activate no Windows
+   pip install -r requirements.txt
+   ```
+
+2. Configure o arquivo `.env`:
+   ```env
+   DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/lista_telefonica
+   SECRET_KEY=sua_chave_secreta_aqui
+   ALGORITHM=HS256
+   ACCESS_TOKEN_EXPIRE_MINUTES=30
+   ```
+
+3. Execute as migrações do banco de dados (Alembic):
+   ```bash
+   alembic upgrade head
+   ```
+
+4. Alimente o banco com os dados iniciais (Seeds):
+   ```bash
+   python -m app.core.init_db
+   ```
+
+5. Inicie o servidor:
+   ```bash
+   uvicorn app.main:app --port 8085
+   ```
+
+### Execução Completa via Docker
+
+Toda a infraestrutura (frontend, backend e banco de dados PostgreSQL) pode ser inicializada via Docker Compose a partir da raiz do projeto:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
+docker compose up -d --build
 ```
 
-2. Instalar dependências:
+O backend estará acessível em `http://localhost:8085` e a documentação interativa em `http://localhost:8085/docs`.
 
+---
+
+## 🧪 Testes Automatizados
+
+A suíte de testes do backend utiliza `pytest` e `pytest-asyncio` com banco de dados em memória para garantir consistência.
+
+Para rodar todos os testes localmente:
 ```bash
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+pytest -q
 ```
-
-3. Executar testes (usa `PYTHONPATH=.` ou `PYTHONPATH=backend` dependendo do seu shell):
-
-```bash
-# estando na raiz do repo
-cd backend
-python -m pytest -q
-```
-
-
-## Executando a API em modo desenvolvimento
-
-Ative o venv conforme acima e então:
-
-```bash
-# estando dentro de backend/ ou com PYTHONPATH apontando
-uvicorn app.main:app --reload --port 8000
-```
-
-Endpoints principais ficam sob `/api` conforme configuração em `app/main.py`.
-
-
-## Variáveis de ambiente importantes
-
-- `DATABASE_URL`: URL SQLAlchemy. Se não definido, o projeto usa SQLite em memória (`sqlite+aiosqlite:///:memory:`) para facilitar testes locais.
-- `RUN_SEEDS`: se `1`, executa as seeds no startup (`app.core.init_db.seeds()`).
-- `SECRET_KEY`: chave para JWT. Se não definida, verifique `app/core/config.py` para o valor padrão (aconselhado configurar em produção).
-- `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS`, `ALGORITHM`: parâmetros de JWT.
-
-Exemplo para usar Postgres (apenas quando o Postgres estiver pronto):
-
-```bash
-export DATABASE_URL='postgresql+asyncpg://user:pass@host:5432/dbname'
-export RUN_SEEDS=1
-```
-
-Observação: para Postgres é necessário instalar `asyncpg` no ambiente.
-
-
-## Banco de dados
-
-- Com `DATABASE_URL` vazio, o código seleciona automaticamente SQLite (`aiosqlite`) para testes locais.
-- Para mudar para Postgres, sete `DATABASE_URL` e instale `asyncpg`.
-
-
-## Testes e dicas
-
-- Executar apenas a suíte de backend:
-
-```bash
-cd backend
-python -m pytest -q
-```
-
-- Se encontrar erro do tipo `ModuleNotFoundError: asyncpg` e você pretende usar Postgres, instale `asyncpg`:
-
-```bash
-python -m pip install asyncpg
-```
-
-- Para testes que fazem chamadas HTTP internas usamos `httpx.AsyncClient(transport=ASGITransport(app=app))` — não é necessário rodar o servidor.
-
-
-## Arquivos úteis
-
-- `app/main.py` — inicialização da aplicação. Veja [app/main.py](app/main.py#L1).
-- `app/core/config.py` — leitura de configurações/variáveis de ambiente. Veja [app/core/config.py](app/core/config.py#L1).
-- `app/database.py` — criação do engine assíncrono e `get_db()` dependency. Veja [app/database.py](app/database.py#L1).
-- `app/core/init_db.py` — rotina de migração/seed segura; controlada por `RUN_SEEDS`. Veja [app/core/init_db.py](app/core/init_db.py#L1).
-- `app/core/passwords.py` — helpers async para hashing/verificação de senha. Veja [app/core/passwords.py](app/core/passwords.py#L1).
-- `backend/tests/` — suíte de testes. Exemplos: [tests/test_usuarios_endpoints.py](tests/test_usuarios_endpoints.py#L1), [tests/test_auth_endpoints.py](tests/test_auth_endpoints.py#L1).
-
-
-## CI
-
-Incluí um workflow GitHub Actions em `.github/workflows/ci.yml` que executa os testes em pushes e PRs para `main`, `master` e `beta-0`.
-Arquivo: [.github/workflows/ci.yml](.github/workflows/ci.yml#L1)
-
-
-## Executando com Docker (opcional)
-
-O projeto contém `backend/Dockerfile`. Exemplo rápido de build/run (ajuste variáveis de ambiente):
-
-```bash
-docker build -t lista-telefonica-backend -f backend/Dockerfile .
-docker run -e DATABASE_URL='sqlite+aiosqlite:///:memory:' -p 8000:8000 lista-telefonica-backend
-```
-
-
-## Troubleshooting rápido
-
-- `Pydantic from_orm deprecation`: já convertemos chamadas para `model_validate` e configuramos `model_config` onde apropriado.
-- `missing asyncpg` → instale `asyncpg` se usar Postgres.
-- `aiosqlite` faltando → `python -m pip install aiosqlite`.
-
-
-## Próximos passos recomendados
-
-- Adicionar workflow de CI para linting/static analysis (flake8, mypy).
-- Adicionar instruções de migração (ex.: Alembic) se migrar para Postgres em produção.
-
-
