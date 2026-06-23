@@ -7,10 +7,7 @@ from app.database import Base
 class Usuario(Base):
     __tablename__ = "usuarios"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    email: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
-    nome: Mapped[str] = mapped_column(String, nullable=False)
-    senha_hash: Mapped[str] = mapped_column(String, nullable=False)
+    usuario_id_externo: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     papel: Mapped[str] = mapped_column(String, nullable=False)  # "GESTOR" ou "CONSULTOR"
 
 class Contato(Base):
@@ -22,7 +19,6 @@ class Contato(Base):
     email: Mapped[str] = mapped_column(String, nullable=True)
     tipo_numero: Mapped[str] = mapped_column(String, nullable=False)  # "institucional" ou "publico"
     
-    # CRUCIAL PARA OFFLINE: Força o PostgreSQL a usar TIMESTAMP WITH TIME ZONE
     # O server_default cria a data no INSERT, o onupdate atualiza a data automaticamente no UPDATE
     criado_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

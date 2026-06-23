@@ -27,7 +27,6 @@ jobs:
           PIP_CACHE_DIR: ${{ runner.temp }}/pip-cache
 
       - name: Run backend tests
-        env:
-          PYTHONPATH: backend
         run: |
-          python -m pytest backend -q
+          cd backend
+          python -m pytest -q

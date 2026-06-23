@@ -17,47 +17,25 @@ class UsuarioRepository:
         result = await self.db.execute(select(Usuario))
         return result.scalars().all()
 
-    async def buscar_por_id(self, user_id: int) -> Optional[Usuario]:
-        result = await self.db.execute(select(Usuario).where(Usuario.id == user_id))
+    async def buscar_por_id_externo(self, usuario_id_externo: str) -> Optional[Usuario]:
+        result = await self.db.execute(select(Usuario).where(Usuario.usuario_id_externo == usuario_id_externo))
         return result.scalars().first()
 
-    async def buscar_por_login(self, login: str) -> Optional[Usuario]:
-        result = await self.db.execute(select(Usuario).where(Usuario.email == login))
-        return result.scalars().first()
-
-    async def criar(self, email: str, nome: str, senha_hash: str, papel: str) -> Usuario:
-        novo = Usuario(email=email, nome=nome, senha_hash=senha_hash, papel=papel)
-        self.db.add(novo)
-        await self.db.commit()
-        await self.db.refresh(novo)
-        return novo
-
-    async def atualizar(self, user_id: int, **fields) -> Optional[Usuario]:
-        usuario = await self.buscar_por_id(user_id)
+    async def salvar_permissao(self, usuario_id_externo: str, papel: str) -> Usuario:
+        usuario = await self.buscar_por_id_externo(usuario_id_externo)
         if not usuario:
-            return None
-        for k, v in fields.items():
-            if hasattr(usuario, k) and v is not None:
-                setattr(usuario, k, v)
-        self.db.add(usuario)
+            usuario = Usuario(usuario_id_externo=usuario_id_externo, papel=papel)
+            self.db.add(usuario)
+        else:
+            usuario.papel = papel
         await self.db.commit()
         await self.db.refresh(usuario)
         return usuario
 
-    async def atualizar_senha(self, user_id: int, senha_hash: str) -> bool:
-        usuario = await self.buscar_por_id(user_id)
+    async def deletar_permissao(self, usuario_id_externo: str) -> bool:
+        usuario = await self.buscar_por_id_externo(usuario_id_externo)
         if not usuario:
             return False
-        usuario.senha_hash = senha_hash
-        self.db.add(usuario)
-        await self.db.commit()
-        return True
-
-    async def deletar_soft(self, user_id: int) -> bool:
-        usuario = await self.buscar_por_id(user_id)
-        if not usuario:
-            return False
-        # implement soft-delete flag if the model had one; fallback to delete
         await self.db.delete(usuario)
         await self.db.commit()
         return True

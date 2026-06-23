@@ -19,18 +19,7 @@ REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=settings.TOKEN_URL, auto_error=False)
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Compatibility wrapper that delegates to app.core.passwords.verify_password."""
-    from app.core.passwords import verify_password as _verify
 
-    return _verify(plain_password, hashed_password)
-
-
-def get_password_hash(password: str) -> str:
-    """Compatibility wrapper that delegates to app.core.passwords.get_password_hash."""
-    from app.core.passwords import get_password_hash as _hash
-
-    return _hash(password)
 
 
 def _now_utc() -> datetime:
@@ -74,13 +63,13 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
         raise credentials_exception
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: Optional[str] = payload.get("sub")
-        if email is None or payload.get("refresh") is True:
+        usuario_id_externo: Optional[str] = payload.get("sub")
+        if usuario_id_externo is None or payload.get("refresh") is True:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
 
-    result = await db.execute(select(Usuario).where(Usuario.email == email))
+    result = await db.execute(select(Usuario).where(Usuario.usuario_id_externo == usuario_id_externo))
     usuario = result.scalars().first()
     if usuario is None:
         raise credentials_exception

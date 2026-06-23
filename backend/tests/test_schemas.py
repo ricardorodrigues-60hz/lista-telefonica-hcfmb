@@ -1,5 +1,5 @@
 from uuid import uuid4
-from pydantic import ValidationError, SecretStr
+from pydantic import ValidationError
 
 from app.schemas.contatos import ContatoCreate
 from app.schemas.auth import LoginRequest
@@ -19,14 +19,14 @@ def test_contato_invalid_phone():
         assert True
 
 
-def test_login_request_secretstr():
-    lr = LoginRequest(login="user@example.com", senha=SecretStr("senha123"))
-    assert isinstance(lr.senha, SecretStr)
+def test_login_request_valid():
+    lr = LoginRequest(usuario_id_externo="gestor-123")
+    assert lr.usuario_id_externo == "gestor-123"
 
 
 def test_usuario_create_papel_validation():
     try:
-        UsuarioCreate(email="u@example.com", nome="U", papel="ADMIN", senha=SecretStr("x"))
+        UsuarioCreate(usuario_id_externo="some-id", papel="ADMIN")
         assert False, "Papel inválido deveria causar ValidationError"
     except ValidationError:
         assert True

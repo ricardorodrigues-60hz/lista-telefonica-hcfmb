@@ -5,8 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import engine, Base, async_session_maker
 from app.models.models import Usuario, Contato
-from app.core.auth import get_password_hash
-from app.core.passwords import async_get_password_hash
 
 async def inicializar_banco():
     # Cria as tabelas no database(PostgreSQL) se não existirem
@@ -19,32 +17,16 @@ async def inicializar_banco():
         await seed_usuarios(db)
         await seed_contatos(db)
         await db.commit()
-
 async def seed_usuarios(db: AsyncSession):
-    gestor_email = "gestor@hcfmb.unesp.br"
-    consultor_email = "consultor@hcfmb.unesp.br"
+    gestor_id = "admin123"
     
-    res_g = await db.execute(select(Usuario).filter(Usuario.email == gestor_email))
+    res_g = await db.execute(select(Usuario).filter(Usuario.usuario_id_externo == gestor_id))
     if not res_g.scalars().first():
-        senha_hash = await async_get_password_hash("gestor123")
         gestor = Usuario(
-            email=gestor_email,
-            nome="Gestor HCFMB",
-            senha_hash=senha_hash,
+            usuario_id_externo=gestor_id,
             papel="GESTOR",
         )
         db.add(gestor)
-
-    res_c = await db.execute(select(Usuario).filter(Usuario.email == consultor_email))
-    if not res_c.scalars().first():
-        senha_hash = await async_get_password_hash("consultor123")
-        consultor = Usuario(
-            email=consultor_email,
-            nome="Consultor HCFMB",
-            senha_hash=senha_hash,
-            papel="CONSULTOR",
-        )
-        db.add(consultor)
 
 async def seed_contatos(db: AsyncSession):
     # Verifica se a tabela de contatos está vazia

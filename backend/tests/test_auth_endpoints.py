@@ -6,40 +6,29 @@ from app.main import app
 
 
 class DummyUser:
-    def __init__(self, login="user@example.com", nome="User", papel="GESTOR", senha_hash="hash"):
-        self.email = login
-        self.login = login
-        self.nome = nome
+    def __init__(self, usuario_id_externo="gestor-123", papel="GESTOR"):
+        self.usuario_id_externo = usuario_id_externo
         self.papel = papel
-        self.senha_hash = senha_hash
 
 
 class FakeRepo:
     def __init__(self, user=None):
         self._user = user or DummyUser()
 
-    async def buscar_por_login(self, login: str):
+    async def buscar_por_id_externo(self, usuario_id_externo: str):
         return self._user
 
 
 @pytest.mark.asyncio
 async def test_login_and_refresh(monkeypatch):
-    # Replace repository and password verification to isolate endpoint logic
     import app.routers.auth as auth_mod
 
     monkeypatch.setattr(auth_mod, "UsuarioRepository", lambda db: FakeRepo())
 
-    async def fake_verify(plain, hashed):
-        return True
-
-    # auth router imported the helper directly; patch the router reference
-    import app.routers.auth as auth_mod2
-    monkeypatch.setattr(auth_mod2, "async_verify_password", fake_verify)
-
     app.dependency_overrides.clear()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        r = await ac.post("/api/auth/login", json={"login": "user@example.com", "senha": "pw"})
+        r = await ac.post("/api/auth/login", json={"usuario_id_externo": "gestor-123"})
 
         assert r.status_code == 200
         data = r.json()

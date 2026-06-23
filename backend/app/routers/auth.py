@@ -2,7 +2,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from jose import jwt, JWTError
-import asyncio
 
 from app.database import get_db
 from app.schemas import LoginRequest, TokenResponse, RefreshRequest
@@ -13,9 +12,7 @@ from app.core.auth import (
     SECRET_KEY,
     ALGORITHM,
 )
-from app.core.passwords import async_verify_password
 
-# Prefix applied by central router: api_router.include_router(auth.router, prefix="/auth")
 router = APIRouter(tags=["Autenticação"])
 
 @router.post("/login", response_model=TokenResponse)
@@ -24,40 +21,26 @@ async def login(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Autentica o usuário usando o login institucional (Intranet) e retorna os tokens JWT.
-    
-    Args:
-        payload (LoginRequest): Contrato contendo login e senha.
-        db (AsyncSession): Sessão assíncrona com o SQLite.
-        
-    Returns:
-        TokenResponse: Par de tokens (Access/Refresh) e os metadados do usuário logado.
+    Simula o recebimento do token do sistema principal. Para testes locais.
     """
     repo = UsuarioRepository(db)
-    # Totalmente alinhado com o seu core/auth.py que usa o identificador da Intranet
-    usuario = await repo.buscar_por_login(payload.login)
+    usuario = await repo.buscar_por_id_externo(payload.usuario_id_externo)
 
-    # senha é SecretStr no schema; extrai valor para verificação
-    senha_plain = payload.senha.get_secret_value()
-    # verify_password usa bcrypt (bloqueante) — use helper que roda em thread pool
-    senha_ok = await async_verify_password(senha_plain, usuario.senha_hash) if usuario else False
-
-    if not usuario or not senha_ok:
+    if not usuario:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Login ou senha incorretos.",
+            detail="Usuário sem permissão cadastrada.",
             headers={"WWW-Authenticate": "Bearer"},
         )
         
-    # Injeta o login no 'sub' e o papel (role) para o controle RBAC do PWA
-    access_token = create_access_token(data={"sub": usuario.email, "role": usuario.papel})
-    refresh_token = create_refresh_token(data={"sub": usuario.email})
+    access_token = create_access_token(data={"sub": usuario.usuario_id_externo, "role": usuario.papel})
+    refresh_token = create_refresh_token(data={"sub": usuario.usuario_id_externo})
 
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
         token_type="bearer",
-        usuario={"nome": usuario.nome, "login": usuario.email, "papel": usuario.papel},
+        usuario={"usuario_id_externo": usuario.usuario_id_externo, "papel": usuario.papel},
     )
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -65,38 +48,31 @@ async def refresh_token_route(
     payload: RefreshRequest, 
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Renova o Access Token de curta duração utilizando o Refresh Token salvo no cliente.
-    Garante resiliência de sessão quando o PWA transita entre estados online/offline.
-    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Refresh token inválido ou expirado.",
     )
     
     try:
-        # Decodifica o token usando as constantes mapeadas e expostas pelo seu core/auth.py
         token_payload = jwt.decode(payload.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
-        login: str = token_payload.get("sub")
+        usuario_id_externo: str = token_payload.get("sub")
 
-        # Validação estrita: além do sub, o token DEVE conter a flag customizada 'refresh' criada no core
-        if login is None or token_payload.get("refresh") is not True:
+        if usuario_id_externo is None or token_payload.get("refresh") is not True:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
 
     repo = UsuarioRepository(db)
-    usuario = await repo.buscar_por_login(login)
+    usuario = await repo.buscar_por_id_externo(usuario_id_externo)
     if not usuario:
         raise credentials_exception
 
-    # Aplica Token Rotation: gera novos tokens invalidando o ciclo anterior para maior segurança
-    novo_access_token = create_access_token(data={"sub": usuario.email, "role": usuario.papel})
-    novo_refresh_token = create_refresh_token(data={"sub": usuario.email})
+    novo_access_token = create_access_token(data={"sub": usuario.usuario_id_externo, "role": usuario.papel})
+    novo_refresh_token = create_refresh_token(data={"sub": usuario.usuario_id_externo})
 
     return TokenResponse(
         access_token=novo_access_token,
         refresh_token=novo_refresh_token,
         token_type="bearer",
-        usuario={"nome": usuario.nome, "login": usuario.email, "papel": usuario.papel},
+        usuario={"usuario_id_externo": usuario.usuario_id_externo, "papel": usuario.papel},
     )
