@@ -4,6 +4,8 @@ import importlib.util
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
+from typing import AsyncGenerator
+
 # Default DATABASE_URL behavior:
 # - If the environment variable DATABASE_URL is set, use it (allows PostgreSQL in prod/CI).
 # - If not set, default to an in-memory SQLite (aiosqlite) to make local testing easy.
@@ -43,7 +45,7 @@ class Base(DeclarativeBase):
     pass
 
 
-async def get_db() -> AsyncSession:
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_maker() as session:
         try:
             yield session
