@@ -23,6 +23,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if [ -f backend/requirements.txt ]; then python -m pip install -r backend/requirements.txt; fi
+          python -m pip install aiosqlite email-validator
         env:
           PIP_CACHE_DIR: ${{ runner.temp }}/pip-cache
 
