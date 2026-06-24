@@ -83,5 +83,6 @@ async def sync_contatos(
     # Endpoint inteligente de sincronização bidirecional/offline
     repo = ContatoRepository(db)
     # chama o método existente do repositório para sincronização em lote
-    ids_confirmados = await repo.sincronizar_lote_offline(payload.contatos, usuario.usuario_id_externo)
+    usuario_id_externo = getattr(usuario, "usuario_id_externo", None) or getattr(usuario, "nome", None)
+    ids_confirmados = await repo.sincronizar_lote_offline(payload.contatos, usuario_id_externo)
     return SyncResponse(sucesso=True, contatos_atualizados=ids_confirmados)

@@ -1,3 +1,11 @@
+# Ignore all .spec.js files
+*.spec.js
+
+# Ignore .assets files
+
+.assets/
+
+
 # Dependency directories
 node_modules/
 jspm_packages/
