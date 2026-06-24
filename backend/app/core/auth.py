@@ -18,10 +18,6 @@ REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
 # Token URL should be absolute path used by the client, read dynamically from settings
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=settings.TOKEN_URL, auto_error=False)
 
-
-
-
-
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 

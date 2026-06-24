@@ -1,4 +1,3 @@
-# backend/app/repositories/contatos.py
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from datetime import datetime, timezone

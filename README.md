@@ -3,6 +3,16 @@
 
 > **Sistema de alta criticidade** para gerenciamento de ramais e contatos institucionais, projetado para funcionar com plena capacidade mesmo em ausência de conexão de rede.
 
+## Índice
+- [Visão Geral](#-visão-geral-da-arquitetura)
+- [Estrutura do Projeto](#-estrutura-do-projeto)
+- [Modelo de Dados](#-modelo-de-dados-e-contrato-de-sincronização)
+- [Como Começar](#-como-começar)
+- [Arquitetura Detalhada](#-arquitetura-offline-first-em-detalhes)
+- [Segurança e Auditoria](#-segurança-e-auditoria)
+- [Teste e Qualidade](#-testes-e-qualidade)
+- [Deployment](#-deployment)
+
 ---
 
 ## 📐 Visão Geral da Arquitetura
@@ -98,6 +108,223 @@ lista_telefonica_acionovoce/
 ```
 SE (contato já existe no servidor):
     SE (cliente.atualizado_em > servidor.atualizado_em):
+        Cliente vence (envia alterações)
+    SENÃO:
+### Fluxo de Sincronização Bidirecional
+
+1. **Operação Local (Offline):** Usuário cria/edita contato → Dexie.js + `sincronizado: false`
+2. **Retorna Online:** Service Worker detecta → `window.online` event
+3. **Coleta de Pendências:** Frontend agrupa todos `{ id, atualizado_em, excluido }` com `sincronizado: false`
+4. **POST /api/contatos/sync:** Envia payload para servidor (JWT bearer token obrigatório)
+5. **Comparação no Servidor:** 
+   - Se `cliente.atualizado_em > servidor.atualizado_em` → cliente vence
+   - Caso contrário → servidor vence, cliente recebe delta
+6. **Persistência Local:** Frontend marca como `sincronizado: true` ou remove se `excluido: true`
+7. **Notificação:** UI atualiza em tempo real via `useLiveQuery` do Dexie.js
+
+### Camadas de Segurança
+
+- **JWT Access Token:** Rotação automática via refresh endpoint (30 min default)
+- **Senha Hash:** bcrypt assíncrono com salt automático
+- **Soft Delete:** Dados nunca desaparecem (apenas `excluido: true`)
+- **Audit Trail:** Cada operação registra `usuario_id_externo`, `acao` e `dados` em JSON imutável
+- **RBAC:** Middlewares verificam `require_gestor` ou `require_consultor`
+
+---
+
+## 🔐 Segurança e Auditoria
+
+### Endpoints de Autenticação
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| `POST` | `/api/auth/login` | Login com `usuario_id_externo` (SSO) |
+| `POST` | `/api/auth/refresh` | Renova access token com refresh token |
+
+### Endpoints de Contatos
+| Método | Endpoint | Perfil | Descrição |
+|--------|----------|--------|-----------|
+| `GET` | `/api/contatos/` | Consultor+ | Lista paginada (sem soft-deletados) |
+| `POST` | `/api/contatos/criar-editar` | Gestor | Cria ou atualiza contato |
+| `DELETE` | `/api/contatos/deletar/{id}` | Gestor | Marca como `excluido: true` |
+| `POST` | `/api/contatos/sync` | Consultor+ | Sincronização bidirecional offline |
+
+### Trilha de Auditoria
+Toda escrita (`criar`, `atualizar`, `deletar`) registra em `audit_trails`:
+```json
+{
+  "id": "<uuid>",
+  "usuario_id_externo": "RI98234",
+  "acao": "atualizar",
+  "tabela": "contatos",
+  "registro_id": "<contato_uuid>",
+  "dados": { "nome": "Novo Nome", "telefone": "..." },
+  "criado_em": "2026-06-24T15:30:45Z"
+}
+```
+
+---
+
+## 🧪 Testes e Qualidade
+
+- **Framework:** pytest + pytest-asyncio (11 testes, 100% cobertura de rotas)
+- **Banco de Testes:** SQLite em memória para isolamento
+- **Execução:** `cd backend && pytest -v`
+
+Casos cobertos:
+- ✅ Autenticação (login, refresh, tokens inválidos)
+- ✅ CRUD de contatos (criar, ler, atualizar, deletar)
+- ✅ Sincronização offline (conflitos, soft delete)
+- ✅ Validação de schemas (email, telefone, enums)
+- ✅ Permissõess (gestor vs consultor)
+
+---
+
+## 🔧 Desenvolvimento e Extensão
+
+### Adicionar um Novo Campo em `Contato`
+
+1. **Backend:** 
+   - Edite `backend/app/models/models.py`
+   - Execute `alembic revision --autogenerate -m "Descrição"` + `alembic upgrade head`
+   - Atualize schema em `backend/app/schemas/contatos.py`
+
+2. **Frontend:**
+   - Edite interface `LocalContato` em `frontend/src/db/db.ts`
+   - Atualize validação em `frontend/src/app/page.tsx`
+
+3. **Testes:** Crie cenários em `backend/tests/test_contatos_endpoints.py`
+
+### Integração num Portal Corporativo
+
+O backend pode ser montado como sub-app FastAPI:
+
+```python
+from fastapi import FastAPI
+from lista_telefonica.backend.app.main import app as lista_app
+
+portal = FastAPI(title="Portal Hospitalar")
+portal.mount("/lista-telefonica", lista_app)  # Monta em /lista-telefonica/*
+```
+
+---
+
+## 🚢 Deployment
+
+### Ambiente de Produção (docker-compose.yml)
+
+```yaml
+services:
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://user:pass@db:5432/lista_telefonica
+      SECRET_KEY: <chave-secreta-production>
+      ALGORITHM: HS256
+    ports:
+      - "8085:8000"
+
+  frontend:
+    build: ./frontend
+    environment:
+      NEXT_PUBLIC_API_URL: https://api.hospital.br/lista-telefonica
+    ports:
+      - "8086:3000"
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: lista_telefonica
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+```
+
+**Checklist de Produção:**
+- [ ] Variáveis de ambiente configuradas (`.env.production`)
+- [ ] `SECRET_KEY` gerado com segurança (`openssl rand -hex 32`)
+- [ ] SSL/TLS ativado (nginx reverso proxy)
+- [ ] Backups automáticos do PostgreSQL
+- [ ] Logs centralizados (ELK, DataDog, etc)
+- [ ] Monitoramento de health checks (`/docs`)
+- [ ] Rate limiting ativado nos routers
+- [ ] CORS restrito a domínios confiáveis
+
+---
+
+## 🚀 Como Começar
+
+### Pré-requisitos
+- **Backend:** Python 3.11+, PostgreSQL 14+
+- **Frontend:** Node.js 20+, npm 10+
+- **Containerização:** Docker Desktop
+
+### Inicialização Rápida (Docker Compose)
+
+```bash
+# 1. Clone o repositório
+git clone <seu-repo> lista_telefonica_acionovoce
+cd lista_telefonica_acionovoce
+
+# 2. Inicie toda a stack
+docker compose up -d --build
+
+# 3. Acesse a aplicação
+Frontend:   http://localhost:8086
+Backend:    http://localhost:8085
+Docs API:   http://localhost:8085/docs
+```
+
+**Credenciais de teste:**
+- Usuário: `RI98234` (gestor com permissão de escrita)
+- Usuário: `RI98235` (consultor com permissão de leitura)
+
+### Desenvolvimento Local
+
+#### Backend
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate  # Windows: .\.venv\Scripts\activate
+pip install -r requirements.txt
+
+# Configure seu .env
+cp .env.example .env  # Ajuste DATABASE_URL conforme necessário
+
+# Migrações e seed
+alembic upgrade head
+python -m app.core.init_db
+
+# Inicie o servidor (porta 8085)
+uvicorn app.main:app --reload --port 8085
+```
+
+#### Frontend
+```bash
+cd frontend
+npm install
+npm run dev  # Servidor em http://localhost:8086
+```
+
+---
+
+## ✨ Principais Features
+
+| Feature | Descrição |
+|---------|-----------|
+| 🔌 **Offline-First** | Funciona sem internet; sincroniza automaticamente quando conectado |
+| 🔐 **RBAC (Gestor/Consultor)** | Controle granular de permissões com auditoria completa |
+| ⚡ **Async/Await** | Python 3.11 + FastAPI + SQLAlchemy 2.0 assíncrono |
+| 📱 **PWA** | Installável como app nativo; Service Worker para cache de assets |
+| 🎯 **Sincronização Inteligente** | Timestamp UTC + tipo_numero enum + soft delete |
+| 📊 **Auditoria Imutável** | Trilha completa de quem fez o quê e quando |
+| 🐳 **Container-Ready** | Docker Compose para dev, staging e produção |
+
+---
+
+## 📚 Arquitetura Offline-First em Detalhes
+
+### Fluxo de Sincronização Bidirecional
         → Aceita a versão do cliente (vitória da edição offline mais recente)
     SENÃO:
         → Ignora (servidor tem a versão mais atual)
