@@ -40,7 +40,7 @@ async def test_listar_usuarios_as_gestor(monkeypatch):
     app.dependency_overrides[get_current_user] = lambda: DummyUser()
 
     # Monkeypatch repository used in router
-    import app.routers.usuarios as usuarios_mod
+    import app.modules.usuarios.router as usuarios_mod
     monkeypatch.setattr(usuarios_mod, "UsuarioRepository", lambda db: fake)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
@@ -63,7 +63,7 @@ async def test_get_usuario_by_id_externo(monkeypatch):
     app.dependency_overrides.clear()
     app.dependency_overrides[get_current_user] = lambda: DummyUser(usuario_id_externo="gestor-1", papel="GESTOR")
 
-    import app.routers.usuarios as usuarios_mod
+    import app.modules.usuarios.router as usuarios_mod
     monkeypatch.setattr(usuarios_mod, "UsuarioRepository", lambda db: fake)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
@@ -83,7 +83,7 @@ async def test_get_usuario_not_found(monkeypatch):
     app.dependency_overrides.clear()
     app.dependency_overrides[get_current_user] = lambda: DummyUser()
 
-    import app.routers.usuarios as usuarios_mod
+    import app.modules.usuarios.router as usuarios_mod
     monkeypatch.setattr(usuarios_mod, "UsuarioRepository", lambda db: fake)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:

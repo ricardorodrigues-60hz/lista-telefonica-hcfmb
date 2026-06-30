@@ -43,7 +43,7 @@ class FakeRepo:
 
 @pytest.mark.asyncio
 async def test_get_contatos_and_sync(monkeypatch):
-    import app.routers.contatos as contatos_mod
+    import app.modules.contatos.router as contatos_mod
 
     monkeypatch.setattr(contatos_mod, "ContatoRepository", lambda db: FakeRepo(db))
 

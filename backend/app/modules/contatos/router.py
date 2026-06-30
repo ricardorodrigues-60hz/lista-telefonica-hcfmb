@@ -1,12 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
-from app.database import get_db
-from app.models import Usuario
+from app.core.database import get_db
+from app.modules.usuarios.models import Usuario
 from app.core.auth import get_current_user, require_gestor
-from app.schemas import ContatoResponse, ContatoCreate, SyncPayload, SyncResponse, IdPayload
-from app.repositories import ContatoRepository
+from app.modules.contatos.schemas import ContatoResponse, ContatoCreate, SyncPayload, SyncResponse, IdPayload
+from app.modules.contatos.repository import ContatoRepository
 
 
 router = APIRouter(tags=["Contatos"])

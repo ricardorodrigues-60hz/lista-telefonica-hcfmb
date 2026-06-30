@@ -3,9 +3,9 @@ from sqlalchemy.future import select
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from app.models import Contato, AuditTrail
-# Certifique-se de que ContatoSyncPayload (ou o nome correto do seu schema de sync) está exportado em app/schemas/__init__.py
-from app.schemas import ContatoCreate, ContatoSync, SyncPayload
+from app.modules.contatos.models import Contato
+from app.core.audit.models import AuditTrail
+from app.modules.contatos.schemas import ContatoCreate, ContatoSync
 
 
 class ContatoRepository:
@@ -22,7 +22,6 @@ class ContatoRepository:
         Returns:
             List[Contato]: A list of active Contato instances.
         """
-        # Mantendo o padrão de exclusão lógica por flag de soft-delete
         result = await self.db.execute(select(Contato).where(Contato.excluido == False))
         return result.scalars().all()
     
@@ -51,7 +50,7 @@ class ContatoRepository:
         Returns:
             Contato: The saved or updated Contato instance.
         """
-        contato = await self.buscar_por_id(contato_in.id) if contato_in.id else None
+        contato = await self.buscar_por_id(str(contato_in.id)) if contato_in.id else None
         acao = "EDITAR" if contato else "CRIAR"
         
         # Padronizando para UTC Naive (sem tzinfo) para evitar erros de comparação com o SQLite/PostgreSQL
@@ -66,7 +65,7 @@ class ContatoRepository:
             contato.excluido = False  # Corrigido de 'excluido_em' para 'excluido'. Reverte soft-delete se re-editado.
         else:
             contato = Contato(
-                id=contato_in.id,  # Garante que se o ID já vier definido (ex: UUID do front), ele seja respeitado
+                id=str(contato_in.id),  # Garante que se o ID já vier definido (ex: UUID do front), ele seja respeitado
                 nome=contato_in.nome,
                 telefone=contato_in.telefone,
                 email=contato_in.email,
@@ -137,7 +136,7 @@ class ContatoRepository:
             except Exception:
                 cliente_updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
-            contato_db = await self.buscar_por_id(c.id) if c.id else None
+            contato_db = await self.buscar_por_id(str(c.id)) if c.id else None
             
             if contato_db:
                 # CONFLITO: Só aceita se a alteração do cliente offline for mais nova do que a do banco.
@@ -153,13 +152,13 @@ class ContatoRepository:
                     self.db.add(AuditTrail(
                         usuario_nome=usuario_nome,
                         acao=acao + "_SYNC",
-                        contato_id=c.id,
+                        contato_id=str(c.id),
                         detalhes=f"Sincronização offline: Contato {c.nome} atualizado (ação: {acao.lower()})."
                     ))
             else:
                 # REGISTRO NOVO: Criado inteiramente offline no cliente
                 novo_contato = Contato(
-                    id=c.id,  # Preserva o ID gerado pelo cliente para manter a consistência com o IndexedDB/Dexie
+                    id=str(c.id),  # Preserva o ID gerado pelo cliente para manter a consistência com o IndexedDB/Dexie
                     nome=c.nome,
                     telefone=c.telefone,
                     email=c.email,
@@ -172,11 +171,11 @@ class ContatoRepository:
                 self.db.add(AuditTrail(
                     usuario_nome=usuario_nome,
                     acao="CRIAR_SYNC",
-                    contato_id=c.id,
+                    contato_id=str(c.id),
                     detalhes=f"Sincronização offline: Contato {c.nome} criado."
                 ))
             
-            ids_confirmados.append(c.id)
+            ids_confirmados.append(str(c.id))
 
         await self.db.commit()
         return ids_confirmados

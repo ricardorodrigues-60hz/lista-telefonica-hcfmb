@@ -1,13 +1,13 @@
 from datetime import datetime, timezone
-import asyncio
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import engine, Base, async_session_maker
-from app.models.models import Usuario, Contato
+from app.core.database import engine, Base, async_session_maker
+from app.modules.usuarios.models import Usuario
+from app.modules.contatos.models import Contato
 
 async def inicializar_banco():
-    # Cria as tabelas no database(PostgreSQL) se não existirem
+    # Cria as tabelas no database se não existirem
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -17,6 +17,7 @@ async def inicializar_banco():
         await seed_usuarios(db)
         await seed_contatos(db)
         await db.commit()
+
 async def seed_usuarios(db: AsyncSession):
     gestor_id = "admin123"
     
@@ -63,7 +64,7 @@ async def seed_contatos(db: AsyncSession):
             ),
         ]
         for c in contatos_iniciais:
-                db.add(c)
+            db.add(c)
 
 
 async def seeds():

@@ -1,10 +1,8 @@
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from pydantic import SecretStr
-import asyncio
 
-from app.models.models import Usuario
+from app.modules.usuarios.models import Usuario
 
 
 class UsuarioRepository:

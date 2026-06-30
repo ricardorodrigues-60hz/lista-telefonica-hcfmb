@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
-from app.database import get_db
-from app.schemas import UsuarioResponse
-from app.repositories import UsuarioRepository
-from app.core.auth import get_current_user, require_gestor
+from app.core.database import get_db
+from app.modules.usuarios.schemas import UsuarioResponse
+from app.modules.usuarios.repository import UsuarioRepository
+from app.core.auth import get_current_user
 
 router = APIRouter(tags=["Permissões de Usuários"])
 

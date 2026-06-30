@@ -1,12 +1,11 @@
-# backend/app/routers/auth.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from jose import jwt, JWTError
 
-from app.database import get_db
-from app.schemas import LoginRequest, TokenResponse, RefreshRequest
-from app.repositories import UsuarioRepository
-from app.core.auth import (
+from app.core.database import get_db
+from app.core.auth.schemas import LoginRequest, TokenResponse, RefreshRequest
+from app.modules.usuarios.repository import UsuarioRepository
+from app.core.auth.service import (
     create_access_token,
     create_refresh_token,
     SECRET_KEY,

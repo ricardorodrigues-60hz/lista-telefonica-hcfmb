@@ -21,7 +21,7 @@ class FakeRepo:
 
 @pytest.mark.asyncio
 async def test_login_and_refresh(monkeypatch):
-    import app.routers.auth as auth_mod
+    import app.core.auth.router as auth_mod
 
     monkeypatch.setattr(auth_mod, "UsuarioRepository", lambda db: FakeRepo())
 

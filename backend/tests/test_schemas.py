@@ -1,9 +1,9 @@
 from uuid import uuid4
 from pydantic import ValidationError
 
-from app.schemas.contatos import ContatoCreate
-from app.schemas.auth import LoginRequest
-from app.schemas.usuarios import UsuarioCreate
+from app.modules.contatos.schemas import ContatoCreate
+from app.core.auth.schemas import LoginRequest
+from app.modules.usuarios.schemas import UsuarioCreate
 
 
 def test_contato_create_valid():

@@ -1,23 +1,23 @@
-# 1. Imagem base oficial do Node
-FROM node:20-alpine
-
+FROM node:20-alpine AS builder
 WORKDIR /app
 
-# 2. Copia os arquivos de definição de dependências
+# Install dependencies and build
 COPY package*.json ./
-
-# 3. Instala as dependências do projeto
-RUN npm install
-
-# 4. Copia o restante do código do Next.js
+RUN npm ci
 COPY . .
-
-# Executa o build de produção do Next.js
 RUN npm run build
 
-EXPOSE 8086
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
 
-# 5. Define a porta do Next.js via variável de ambiente antes de rodar
+# Copy only what is needed to run
+COPY --from=builder /app/.next .next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/node_modules ./node_modules
+
 ENV PORT=8086
+EXPOSE 8086
 
 CMD ["npm", "run", "start"]
