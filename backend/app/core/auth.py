@@ -6,8 +6,8 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.database import get_db
-from app.models.models import Usuario
+from app.core.database import get_db
+from app.modules.usuarios.models import UsuarioPermissao
 from app.core.config import settings
 
 SECRET_KEY = settings.SECRET_KEY
@@ -45,7 +45,7 @@ def create_refresh_token(data: dict) -> str:
     return encoded_jwt
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> Usuario:
+async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> UsuarioPermissao:
     """Resolve the current user from a JWT token asynchronously.
 
     Raises HTTPException 401 when token is invalid or user not found.
@@ -65,14 +65,14 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     except JWTError:
         raise credentials_exception
 
-    result = await db.execute(select(Usuario).where(Usuario.usuario_id_externo == usuario_id_externo))
+    result = await db.execute(select(UsuarioPermissao).where(UsuarioPermissao.usuario_id_externo == usuario_id_externo))
     usuario = result.scalars().first()
     if usuario is None:
         raise credentials_exception
     return usuario
 
 
-def require_gestor(usuario: Usuario = Depends(get_current_user)) -> Usuario:
+def require_gestor(usuario: UsuarioPermissao = Depends(get_current_user)) -> UsuarioPermissao:
     if usuario.papel != "GESTOR":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -1,4 +1,4 @@
-import type { NextConfig } from "next";
+﻿import type { NextConfig } from "next";
 import withPWAInit from "@ducanh2912/next-pwa";
 
 const withPWA = withPWAInit({
@@ -9,6 +9,26 @@ const withPWA = withPWAInit({
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  basePath: '/lista-telefonica',
+  outputFileTracingRoot: __dirname,
+  async redirects() {
+    return [
+      {
+        source: '/',
+        destination: '/lista-telefonica',
+        permanent: false,
+        basePath: false,
+      },
+    ];
+  },
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'http://127.0.0.1:8085/api/:path*',
+      },
+    ];
+  },
 };
 
 export default withPWA(nextConfig);

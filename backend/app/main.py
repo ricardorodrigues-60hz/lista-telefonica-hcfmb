@@ -10,12 +10,10 @@ from app.modules.contatos.router import router as contatos_router
 async def lifespan(app: FastAPI):
     from app.core import init_db
 
-    # Only run seeds when explicitly enabled (useful to skip in tests/CI)
-    if os.getenv("RUN_SEEDS", "0") == "1":
-        try:
-            await init_db.seeds()
-        except Exception:
-            logging.exception("init_db.seeds() failed during startup; continuing without seeding")
+    try:
+        await init_db.inicializar_banco()
+    except Exception:
+        logging.exception("init_db.inicializar_banco() failed during startup; continuing without initializing database")
 
     yield  # Continua com a execução da aplicação
 
@@ -35,3 +33,15 @@ api_router = APIRouter()
 api_router.include_router(contatos_router, prefix="/contatos", tags=["Contatos"])
 
 app.include_router(api_router, prefix="/api")
+
+@app.get("/")
+async def read_root():
+    return {
+        "message": "Aciono Você API",
+        "api_base": "/api",
+        "docs": "/docs",
+    }
+
+@app.get("/api")
+async def read_api_root():
+    return {"message": "Aciono Você API!"}

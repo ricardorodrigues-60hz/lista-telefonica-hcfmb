@@ -10,21 +10,25 @@
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
-    "dexie": "^4.4.3",
+    "dexie": "^4.4.4",
     "dexie-react-hooks": "^4.4.0",
-    "lucide-react": "^1.20.0",
-    "next": "16.2.9",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "lucide-react": "^1.23.0",
+    "next": "^16.2.9",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
+    "@tailwindcss/postcss": "^4.3.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "tailwindcss": "^4.3.2",
+    "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "postcss": "^8.5.10",
+    "serialize-javascript": "^7.0.5"
   }
 }
