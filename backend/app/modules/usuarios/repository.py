@@ -1,39 +1,34 @@
-from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-
-from app.modules.usuarios.models import Usuario
-
+from app.modules.usuarios.models import UsuarioPermissao
 
 class UsuarioRepository:
-    """Repository for user operations using AsyncSession."""
+    """Repository for user permissions mapping."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def listar(self) -> List[Usuario]:
-        result = await self.db.execute(select(Usuario))
-        return result.scalars().all()
+    async def buscar_papel_por_id_externo(self, usuario_id_externo: str) -> str:
+        """Fetch the role (papel) for an external user ID. Return 'CONSULTOR' by default."""
+        if not usuario_id_externo:
+            return "CONSULTOR"
+        result = await self.db.execute(
+            select(UsuarioPermissao.papel).where(UsuarioPermissao.usuario_id_externo == usuario_id_externo)
+        )
+        papel = result.scalars().first()
+        return papel if papel else "CONSULTOR"
 
-    async def buscar_por_id_externo(self, usuario_id_externo: str) -> Optional[Usuario]:
-        result = await self.db.execute(select(Usuario).where(Usuario.usuario_id_externo == usuario_id_externo))
-        return result.scalars().first()
-
-    async def salvar_permissao(self, usuario_id_externo: str, papel: str) -> Usuario:
-        usuario = await self.buscar_por_id_externo(usuario_id_externo)
-        if not usuario:
-            usuario = Usuario(usuario_id_externo=usuario_id_externo, papel=papel)
-            self.db.add(usuario)
+    async def salvar_permissao(self, usuario_id_externo: str, papel: str) -> UsuarioPermissao:
+        """Helper to create or update permissions, useful for seeds and tests."""
+        result = await self.db.execute(
+            select(UsuarioPermissao).where(UsuarioPermissao.usuario_id_externo == usuario_id_externo)
+        )
+        permissao = result.scalars().first()
+        if not permissao:
+            permissao = UsuarioPermissao(usuario_id_externo=usuario_id_externo, papel=papel)
+            self.db.add(permissao)
         else:
-            usuario.papel = papel
+            permissao.papel = papel
         await self.db.commit()
-        await self.db.refresh(usuario)
-        return usuario
-
-    async def deletar_permissao(self, usuario_id_externo: str) -> bool:
-        usuario = await self.buscar_por_id_externo(usuario_id_externo)
-        if not usuario:
-            return False
-        await self.db.delete(usuario)
-        await self.db.commit()
-        return True
+        await self.db.refresh(permissao)
+        return permissao

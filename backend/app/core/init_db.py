@@ -3,7 +3,7 @@ from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import engine, Base, async_session_maker
-from app.modules.usuarios.models import Usuario
+from app.modules.usuarios.models import UsuarioPermissao
 from app.modules.contatos.models import Contato
 
 async def inicializar_banco():
@@ -21,9 +21,9 @@ async def inicializar_banco():
 async def seed_usuarios(db: AsyncSession):
     gestor_id = "admin123"
     
-    res_g = await db.execute(select(Usuario).filter(Usuario.usuario_id_externo == gestor_id))
+    res_g = await db.execute(select(UsuarioPermissao).filter(UsuarioPermissao.usuario_id_externo == gestor_id))
     if not res_g.scalars().first():
-        gestor = Usuario(
+        gestor = UsuarioPermissao(
             usuario_id_externo=gestor_id,
             papel="GESTOR",
         )

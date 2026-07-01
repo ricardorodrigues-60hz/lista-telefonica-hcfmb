@@ -3,8 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from app.core.database import get_db
-from app.modules.usuarios.models import Usuario
-from app.core.auth import get_current_user, require_gestor
+from app.core.auth import get_current_user, require_gestor, UsuarioAutenticado
 from app.modules.contatos.schemas import ContatoResponse, ContatoCreate, SyncPayload, SyncResponse, IdPayload
 from app.modules.contatos.repository import ContatoRepository
 
@@ -29,7 +28,7 @@ async def get_contatos(db: AsyncSession = Depends(get_db)):
 @router.post("/criar-editar", response_model=ContatoResponse)
 async def criar_editar_contato(
     contato_in: ContatoCreate,
-    usuario: Usuario = Depends(require_gestor),
+    usuario: UsuarioAutenticado = Depends(require_gestor),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -51,7 +50,7 @@ async def criar_editar_contato(
 @router.post("/deletar")
 async def deletar_contato(
     payload: IdPayload,
-    usuario: Usuario = Depends(require_gestor),
+    usuario: UsuarioAutenticado = Depends(require_gestor),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -77,7 +76,7 @@ async def deletar_contato(
 @router.post("/sync", response_model=SyncResponse)
 async def sync_contatos(
     payload: SyncPayload,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: UsuarioAutenticado = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     # Endpoint inteligente de sincronização bidirecional/offline

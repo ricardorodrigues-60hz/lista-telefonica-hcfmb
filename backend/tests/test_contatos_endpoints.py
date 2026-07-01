@@ -4,10 +4,7 @@ from httpx import ASGITransport
 from datetime import datetime, timezone
 
 from app.main import app
-
-
 from uuid import uuid4
-
 
 class FakeContato:
     def __init__(self, id=None, nome=None):
@@ -19,7 +16,6 @@ class FakeContato:
         self.atualizado_em = datetime.now(timezone.utc)
         self.excluido = False
 
-
 class FakeRepo:
     def __init__(self, db=None):
         pass
@@ -28,18 +24,14 @@ class FakeRepo:
         return [FakeContato(nome="A"), FakeContato(nome="B")]
 
     async def sincronizar_lote_offline(self, contatos, usuario_nome):
-        # pretend we updated the first contact
         ids = []
         for c in contatos:
             try:
-                # pydantic model: has attribute `id`
                 ids.append(str(c.id))
             except Exception:
-                # dict-like
                 if isinstance(c, dict) and c.get("id"):
                     ids.append(str(c.get("id")))
         return ids
-
 
 @pytest.mark.asyncio
 async def test_get_contatos_and_sync(monkeypatch):
@@ -47,11 +39,11 @@ async def test_get_contatos_and_sync(monkeypatch):
 
     monkeypatch.setattr(contatos_mod, "ContatoRepository", lambda db: FakeRepo(db))
 
-    # override auth dependency for sync endpoint
     from app.core.auth import get_current_user
+    from app.core.auth.service import UsuarioAutenticado
 
     app.dependency_overrides.clear()
-    app.dependency_overrides[get_current_user] = lambda: type("U", (), {"nome": "Tester"})()
+    app.dependency_overrides[get_current_user] = lambda: UsuarioAutenticado(usuario_id_externo="Tester", papel="GESTOR")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         r = await ac.get("/api/contatos/")

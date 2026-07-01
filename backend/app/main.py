@@ -4,8 +4,6 @@ from contextlib import asynccontextmanager
 import os
 import logging
 
-from app.core.auth.router import router as auth_router
-from app.modules.usuarios.router import router as usuarios_router
 from app.modules.contatos.router import router as contatos_router
 
 @asynccontextmanager
@@ -34,8 +32,6 @@ app.add_middleware(
 
 # Aggregate API router with prefixes compatible with existing paths
 api_router = APIRouter()
-api_router.include_router(auth_router, prefix="/auth", tags=["Autenticação"])
-api_router.include_router(usuarios_router, prefix="/usuarios", tags=["Usuários"])
 api_router.include_router(contatos_router, prefix="/contatos", tags=["Contatos"])
 
 app.include_router(api_router, prefix="/api")
