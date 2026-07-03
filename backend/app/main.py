@@ -5,6 +5,7 @@ import os
 import logging
 
 from app.modules.contatos.router import router as contatos_router
+from app.core.config import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -32,16 +33,18 @@ app.add_middleware(
 api_router = APIRouter()
 api_router.include_router(contatos_router, prefix="/contatos", tags=["Contatos"])
 
-app.include_router(api_router, prefix="/api")
+# Mount under the configurable API base. Default is `/lista-telefonica/api` for
+# embedding in host systems.
+app.include_router(api_router, prefix=settings.API_BASE)
 
 @app.get("/")
 async def read_root():
     return {
         "message": "Aciono Você API",
-        "api_base": "/api",
-        "docs": "/docs",
+        "api_base": "/lista-telefonica/api",
+        "docs": "/lista-telefonica/api/docs",
     }
 
-@app.get("/api")
+@app.get(settings.API_BASE)
 async def read_api_root():
     return {"message": "Aciono Você API!"}

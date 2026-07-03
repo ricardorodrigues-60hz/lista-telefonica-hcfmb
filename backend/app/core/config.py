@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     TOKEN_URL: str = "/api/auth/login"
+    API_PORT: int = 8085
+    # Base path used when mounting the API inside another system
+    # Default kept as /lista-telefonica/api for integration with host systems
+    API_BASE: str = "/lista-telefonica/api"
 
     # Configura o Pydantic para ler um arquivo chamado '.env' na raiz do backend
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")

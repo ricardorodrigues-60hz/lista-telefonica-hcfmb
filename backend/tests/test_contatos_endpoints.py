@@ -3,6 +3,10 @@ from httpx import AsyncClient
 from httpx import ASGITransport
 from datetime import datetime, timezone
 
+from http import HTTPStatus
+
+from fastapi.testclient import TestClient
+
 from app.main import app
 from uuid import uuid4
 
@@ -39,7 +43,7 @@ async def test_get_contatos_and_sync(monkeypatch):
 
     monkeypatch.setattr(contatos_mod, "ContatoRepository", lambda db: FakeRepo(db))
 
-    from app.core.auth import get_current_user
+    from app.core.auth  import get_current_user
     from app.core.auth.service import UsuarioAutenticado
 
     app.dependency_overrides.clear()
@@ -56,3 +60,11 @@ async def test_get_contatos_and_sync(monkeypatch):
         assert r2.status_code == 200
         d2 = r2.json()
         assert d2.get("sucesso") is True
+
+# async def test_get_contatos_deve_retornar_200():
+    
+#     client = TestClient(app)
+
+#     response = client.get('/contatos')
+
+#     assert response.status_code == HTTPStatus.OK
