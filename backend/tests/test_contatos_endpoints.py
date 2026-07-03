@@ -7,6 +7,7 @@ from http import HTTPStatus
 
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
 from app.main import app
 from uuid import uuid4
 
@@ -37,7 +38,7 @@ class FakeRepo:
                     ids.append(str(c.get("id")))
         return ids
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_get_contatos_and_sync(monkeypatch):
     import app.modules.contatos.router as contatos_mod
 
@@ -50,13 +51,13 @@ async def test_get_contatos_and_sync(monkeypatch):
     app.dependency_overrides[get_current_user] = lambda: UsuarioAutenticado(usuario_id_externo="Tester", papel="GESTOR")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        r = await ac.get("/api/contatos/")
+        r = await ac.get(f"{settings.API_BASE}/contatos/")
         assert r.status_code == 200
         data = r.json()
         assert isinstance(data, list) and len(data) == 2
 
         payload = {"contatos": [data[0]]}
-        r2 = await ac.post("/api/contatos/sync", json=payload)
+        r2 = await ac.post(f"{settings.API_BASE}/contatos/sync", json=payload)
         assert r2.status_code == 200
         d2 = r2.json()
         assert d2.get("sucesso") is True

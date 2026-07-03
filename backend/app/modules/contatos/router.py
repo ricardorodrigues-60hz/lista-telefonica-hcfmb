@@ -13,6 +13,9 @@ router = APIRouter(tags=["Contatos"])
 
 @router.get("/", response_model=List[ContatoResponse])
 async def get_contatos(db: AsyncSession = Depends(get_db)):
+    """List all active contacts."""
+    repo = ContatoRepository(db)
+    return await repo.listar_ativos()
     """
     Endpoint para listar todos os contatos ativos.
 

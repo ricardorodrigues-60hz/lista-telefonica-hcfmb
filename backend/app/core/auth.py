@@ -72,7 +72,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     return usuario
 
 
-def require_gestor(usuario: UsuarioPermissao = Depends(get_current_user)) -> UsuarioPermissao:
+def require_gestor(usuario: UsuarioAutenticado = Depends(get_current_user)) -> UsuarioAutenticado:
     if usuario.papel != "GESTOR":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
