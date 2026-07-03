@@ -301,7 +301,15 @@ export default function Home() {
   const handleSaveContact = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const id = editingContactId || crypto.randomUUID();
+    // Generate a UUID with a fallback for environments where crypto.randomUUID is unavailable (e.g., jsdom in tests)
+    const generateId = () => {
+      if (typeof crypto !== 'undefined' && typeof (crypto as any).randomUUID === 'function') {
+        return (crypto as any).randomUUID();
+      }
+      // Simple fallback using random numbers
+      return Math.random().toString(36).substring(2, 15);
+    };
+    const id = editingContactId || generateId();
     const now = new Date().toISOString();
     
     const newContact: LocalContato = {
@@ -557,46 +565,50 @@ export default function Home() {
             
             <div className="modal-body">
               <div className="form-field">
-                <label>Setor / Identificação</label>
-                <input 
-                  type="text" 
-                  required 
-                  placeholder="Ex: Recepção PS"
-                  value={formNome}
-                  onChange={(e) => setFormNome(e.target.value)}
-                />
+                <label htmlFor="formNome">Setor / Identificação</label>
+                 <input 
+                   id="formNome"
+                   type="text" 
+                   required 
+                   placeholder="Ex: Recepção PS"
+                   value={formNome}
+                   onChange={(e) => setFormNome(e.target.value)}
+                 />
               </div>
               
               <div className="form-field">
-                <label>Número / Ramal</label>
-                <input 
-                  type="text" 
-                  required 
-                  placeholder="Ex: (14) 3811-1234 ou 1234"
-                  value={formTelefone}
-                  onChange={(e) => setFormTelefone(e.target.value)}
-                />
+                <label htmlFor="formTelefone">Número / Ramal</label>
+                 <input 
+                   id="formTelefone"
+                   type="text" 
+                   required 
+                   placeholder="Ex: (14) 3811-1234 ou 1234"
+                   value={formTelefone}
+                   onChange={(e) => setFormTelefone(e.target.value)}
+                 />
               </div>
               
               <div className="form-field">
-                <label>Email Corporativo (Opcional)</label>
-                <input 
-                  type="email" 
-                  placeholder="Ex: contato@hcfmb.unesp.br"
-                  value={formEmail}
-                  onChange={(e) => setFormEmail(e.target.value)}
-                />
+                <label htmlFor="formEmail">Email Corporativo (Opcional)</label>
+                 <input 
+                   id="formEmail"
+                   type="email" 
+                   placeholder="Ex: contato@hcfmb.unesp.br"
+                   value={formEmail}
+                   onChange={(e) => setFormEmail(e.target.value)}
+                 />
               </div>
               
               <div className="form-field">
-                <label>Categoria de Ramal</label>
-                <select 
-                  value={formTipo}
-                  onChange={(e) => setFormTipo(e.target.value as 'institucional' | 'publico')}
-                >
-                  <option value="publico">Público</option>
-                  <option value="institucional">Institucional (Restrito)</option>
-                </select>
+                <label htmlFor="formTipo">Categoria de Ramal</label>
+                 <select 
+                   id="formTipo"
+                   value={formTipo}
+                   onChange={(e) => setFormTipo(e.target.value as 'institucional' | 'publico')}
+                 >
+                   <option value="publico">Público</option>
+                   <option value="institucional">Institucional (Restrito)</option>
+                 </select>
               </div>
             </div>
             

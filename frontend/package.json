@@ -6,7 +6,8 @@
     "dev": "next dev -p 8086 -H 0.0.0.0 --webpack",
     "build": "next build --webpack",
     "start": "next start -p 8086",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "jest"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
@@ -19,12 +20,18 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^13.4.0",
+    "@types/jest": "^29.5.14",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.0.0",
     "tailwindcss": "^4.3.2",
+    "ts-jest": "^29.4.11",
     "typescript": "^5.9.3"
   },
   "overrides": {
