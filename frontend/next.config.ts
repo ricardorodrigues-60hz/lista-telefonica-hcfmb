@@ -1,4 +1,4 @@
-﻿import type { NextConfig } from "next";
+import type { NextConfig } from "next";
 import withPWAInit from "@ducanh2912/next-pwa";
 
 const withPWA = withPWAInit({
@@ -24,8 +24,9 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
-        source: '/api/:path*',
-        destination: 'http://127.0.0.1:8085/api/:path*',
+        source: '/lista-telefonica/api/:path*',
+        destination: 'http://127.0.0.1:8085/lista-telefonica/api/:path*',
+        basePath: false,
       },
     ];
   },

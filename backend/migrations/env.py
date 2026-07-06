@@ -8,7 +8,6 @@ from alembic import context
 from app.core.database import Base
 from app.modules.usuarios.models import UsuarioPermissao
 from app.modules.contatos.models import Contato
-from app.core.audit.models import AuditTrail
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config

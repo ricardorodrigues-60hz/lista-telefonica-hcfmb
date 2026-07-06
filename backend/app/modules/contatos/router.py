@@ -1,21 +1,23 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
+from app.core.auth import UsuarioAutenticado, get_current_user, require_gestor
 from app.core.database import get_db
-from app.core.auth import get_current_user, require_gestor, UsuarioAutenticado
-from app.modules.contatos.schemas import ContatoResponse, ContatoCreate, SyncPayload, SyncResponse, IdPayload
 from app.modules.contatos.repository import ContatoRepository
-
+from app.modules.contatos.schemas import (
+    ContatoCreate,
+    ContatoResponse,
+    IdPayload,
+    SyncPayload,
+    SyncResponse,
+)
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["Contatos"])
 
 
 @router.get("/", response_model=List[ContatoResponse])
 async def get_contatos(db: AsyncSession = Depends(get_db)):
-    """List all active contacts."""
-    repo = ContatoRepository(db)
-    return await repo.listar_ativos()
     """
     Endpoint para listar todos os contatos ativos.
 
@@ -28,11 +30,12 @@ async def get_contatos(db: AsyncSession = Depends(get_db)):
     repo = ContatoRepository(db)
     return await repo.listar_ativos()
 
+
 @router.post("/criar-editar", response_model=ContatoResponse)
 async def criar_editar_contato(
     contato_in: ContatoCreate,
     usuario: UsuarioAutenticado = Depends(require_gestor),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Endpoint para criar ou editar um contato.
@@ -49,12 +52,13 @@ async def criar_editar_contato(
     """
     repo = ContatoRepository(db)
     return await repo.salvar_ou_atualizar(contato_in, usuario.usuario_id_externo)
-    
+
+
 @router.post("/deletar")
 async def deletar_contato(
     payload: IdPayload,
     usuario: UsuarioAutenticado = Depends(require_gestor),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Endpoint para realizar exclusão lógica (soft delete) de um contato. O contato não é removido do banco, mas sim marcado como inativo.
@@ -73,8 +77,9 @@ async def deletar_contato(
     contato = await repo.deletar_soft(str(contato_id), usuario.usuario_id_externo)
     if not contato:
         raise HTTPException(status_code=404, detail="Contato não encontrado.")
-    
+
     return {"message": "Contato marcado como excluído com sucesso."}
+
 
 @router.post("/sync", response_model=SyncResponse)
 async def sync_contatos(
@@ -85,6 +90,10 @@ async def sync_contatos(
     # Endpoint inteligente de sincronização bidirecional/offline
     repo = ContatoRepository(db)
     # chama o método existente do repositório para sincronização em lote
-    usuario_id_externo = getattr(usuario, "usuario_id_externo", None) or getattr(usuario, "nome", None)
-    ids_confirmados = await repo.sincronizar_lote_offline(payload.contatos, usuario_id_externo)
+    usuario_id_externo = getattr(usuario, "usuario_id_externo", None) or getattr(
+        usuario, "nome", None
+    )
+    ids_confirmados = await repo.sincronizar_lote_offline(
+        payload.contatos, usuario_id_externo
+    )
     return SyncResponse(sucesso=True, contatos_atualizados=ids_confirmados)
