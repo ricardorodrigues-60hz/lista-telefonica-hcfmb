@@ -18,7 +18,7 @@ import Home from './page';
 // Helper to mock fetch responses
 const mockFetch = (responses: Record<string, any>) => {
   global.fetch = jest.fn().mockImplementation((url: RequestInfo) => {
-    const endpoint = (url as string).replace(/^.*\/lista-telefonica\/api/, '');
+    const endpoint = (url as string).replace(/^.*\/lista-telefonica/, '');
     const response = responses[endpoint] ?? { status: 404 };
     return Promise.resolve({
       ok: response.ok ?? true,
@@ -44,7 +44,7 @@ describe('page.tsx – Lista Telefônica UI', () => {
     });
     render(<Home />);
     // Wait for the async loadContactsFromServer to finish
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/lista-telefonica/api/contatos', expect.any(Object)));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/lista-telefonica/contatos', expect.any(Object)));
     // Verify role badge shows GESTOR and Add button is present
     expect(screen.getByText(/ID: admin123 \(GESTOR\)/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Novo Ramal/i })).toBeInTheDocument();
@@ -68,8 +68,7 @@ describe('page.tsx – Lista Telefônica UI', () => {
     });
     // Mock POST endpoint for create/edit and GET contacts
     mockFetch({
-      '/contatos': { body: [] },
-      '/contatos/criar-editar': { ok: true },
+      '/contatos': { body: [] }
     });
     render(<Home />);
     // Open modal
@@ -83,10 +82,11 @@ describe('page.tsx – Lista Telefônica UI', () => {
     fireEvent.click(screen.getByRole('button', { name: /Salvar Ramal/i }));
     // Wait for any fetch calls to settle
     await waitFor(() => expect(fetch).toHaveBeenCalled());
-    // Verify that a POST request to the create/edit endpoint was made at least once
+    // Verify that a POST request to the contacts endpoint was made at least once
     const postCalls = (fetch as jest.Mock).mock.calls.filter(call =>
       typeof call[0] === 'string' &&
-      call[0].includes('/contatos/criar-editar') &&
+      call[0].includes('/contatos') &&
+      !call[0].includes('/sync') &&
       (call[1] as RequestInit)?.method === 'POST'
     );
     expect(postCalls.length).toBeGreaterThan(0);

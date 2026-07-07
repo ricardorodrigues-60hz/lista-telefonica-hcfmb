@@ -3,7 +3,6 @@ from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import engine, Base, async_session_maker
-from app.modules.usuarios.models import UsuarioPermissao
 from app.modules.contatos.models import Contato
 
 async def inicializar_banco():
@@ -13,21 +12,8 @@ async def inicializar_banco():
 
     # Abre uma sessão para injetar dados testes
     async with async_session_maker() as db:
-        # Verifica se os usuários já existem
-        await seed_usuarios(db)
         # await seed_contatos(db)
         await db.commit()
-
-async def seed_usuarios(db: AsyncSession):
-    gestor_id = "admin123"
-    
-    res_g = await db.execute(select(UsuarioPermissao).filter(UsuarioPermissao.usuario_id_externo == gestor_id))
-    if not res_g.scalars().first():
-        gestor = UsuarioPermissao(
-            usuario_id_externo=gestor_id,
-            papel="GESTOR",
-        )
-        db.add(gestor)
 
 async def seed_contatos(db: AsyncSession):
     # Verifica se a tabela de contatos está vazia

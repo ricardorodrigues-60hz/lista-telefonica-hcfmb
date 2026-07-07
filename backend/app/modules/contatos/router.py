@@ -32,14 +32,14 @@ async def get_contatos(db: AsyncSession = Depends(get_db)):
     return await repo.listar_ativos()
 
 
-# Create contact (criar-editar)
-@router.post("/criar-editar", response_model=ContatoResponse, status_code=status.HTTP_200_OK)
+# Create contact (POST /)
+@router.post("/", response_model=ContatoResponse, status_code=status.HTTP_201_CREATED)
 async def create_contato(
     contato_in: ContatoCreate,
     usuario: UsuarioAutenticado = Depends(require_gestor),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new contact."""
+    """Create a new contact via RESTful POST."""
     repo = ContatoRepository(db)
     return await repo.criar_contato(contato_in, usuario.usuario_id_externo)
 
@@ -60,23 +60,19 @@ async def update_contato(
     return contato
 
 
-# Soft delete contact via POST /deletar
-@router.post("/deletar")
+# Soft delete contact (DELETE /{contato_id})
+@router.delete("/{contato_id}")
 async def delete_contato(
-    payload: dict,
+    contato_id: str,
     usuario: UsuarioAutenticado = Depends(require_gestor),
     db: AsyncSession = Depends(get_db),
 ):
-    """Soft‑delete a contact identified by ID using JSON payload {"id": <id>}."""
-    contato_id = payload.get("id")
-    if not contato_id:
-        raise HTTPException(status_code=400, detail="ID do contato não fornecido.")
+    """Soft‑delete a contact identified by ID via DELETE request."""
     repo = ContatoRepository(db)
     sucesso = await repo.deletar_soft(contato_id, usuario.usuario_id_externo)
     if not sucesso:
         raise HTTPException(status_code=404, detail="Contato não encontrado.")
     return {"message": "Contato marcado como excluído com sucesso."}
-
 
 # Sync contacts
 @router.post("/sync", response_model=SyncResponse)
