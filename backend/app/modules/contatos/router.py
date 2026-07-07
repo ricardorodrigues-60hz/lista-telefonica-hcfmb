@@ -5,17 +5,18 @@ from app.core.database import get_db
 from app.modules.contatos.repository import ContatoRepository
 from app.modules.contatos.schemas import (
     ContatoCreate,
+    ContatoUpdate,
     ContatoResponse,
-    IdPayload,
     SyncPayload,
     SyncResponse,
 )
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["Contatos"])
 
 
+# List contacts
 @router.get("/", response_model=List[ContatoResponse])
 async def get_contatos(db: AsyncSession = Depends(get_db)):
     """
@@ -31,56 +32,53 @@ async def get_contatos(db: AsyncSession = Depends(get_db)):
     return await repo.listar_ativos()
 
 
-@router.post("/criar-editar", response_model=ContatoResponse)
-async def criar_editar_contato(
+# Create contact (criar-editar)
+@router.post("/criar-editar", response_model=ContatoResponse, status_code=status.HTTP_200_OK)
+async def create_contato(
     contato_in: ContatoCreate,
     usuario: UsuarioAutenticado = Depends(require_gestor),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Endpoint para criar ou editar um contato.
-    Se o contato já existir (identificado por ID), ele será atualizado;
-    caso contrário, um novo contato será criado.
-
-    Args:
-        contato_in (ContatoCreate): Dados do contato a ser criado ou editado.
-        usuario (Usuario): O usuário autenticado, injetado via Depends(require_gestor) para garantir que apenas gestores possam acessar este endpoint.
-        db
-        (AsyncSession): Sessão assíncrona do banco de dados, injetada via Depends.
-    Returns:
-        ContatoResponse: O contato criado ou atualizado.
-    """
+    """Create a new contact."""
     repo = ContatoRepository(db)
-    return await repo.salvar_ou_atualizar(contato_in, usuario.usuario_id_externo)
+    return await repo.criar_contato(contato_in, usuario.usuario_id_externo)
 
 
-@router.post("/deletar")
-async def deletar_contato(
-    payload: IdPayload,
+# Update contact
+@router.put("/{contato_id}", response_model=ContatoResponse)
+async def update_contato(
+    contato_id: str,
+    contato_in: ContatoUpdate,
     usuario: UsuarioAutenticado = Depends(require_gestor),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Endpoint para realizar exclusão lógica (soft delete) de um contato. O contato não é removido do banco, mas sim marcado como inativo.
-    Args:
-        payload (dict): Um dicionário contendo o ID do contato a ser deletado, no formato {"id": <contato_id>}.
-        usuario (Usuario): O usuário autenticado, injetado via Depends(require_gestor) para garantir que apenas gestores possam acessar este endpoint.
-        db (AsyncSession): Sessão assíncrona do banco de dados, injetada via Depends.
-    Returns:
-        dict: Uma mensagem indicando o sucesso da operação.
-    """
-    contato_id = payload.id
-    if not contato_id:
-        raise HTTPException(status_code=400, detail="ID do contato é obrigatório.")
-
+    """Update an existing contact identified by ID."""
     repo = ContatoRepository(db)
-    contato = await repo.deletar_soft(str(contato_id), usuario.usuario_id_externo)
+    contato = await repo.atualizar_contato(contato_id, contato_in, usuario.usuario_id_externo)
     if not contato:
         raise HTTPException(status_code=404, detail="Contato não encontrado.")
+    return contato
 
+
+# Soft delete contact via POST /deletar
+@router.post("/deletar")
+async def delete_contato(
+    payload: dict,
+    usuario: UsuarioAutenticado = Depends(require_gestor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Soft‑delete a contact identified by ID using JSON payload {"id": <id>}."""
+    contato_id = payload.get("id")
+    if not contato_id:
+        raise HTTPException(status_code=400, detail="ID do contato não fornecido.")
+    repo = ContatoRepository(db)
+    sucesso = await repo.deletar_soft(contato_id, usuario.usuario_id_externo)
+    if not sucesso:
+        raise HTTPException(status_code=404, detail="Contato não encontrado.")
     return {"message": "Contato marcado como excluído com sucesso."}
 
 
+# Sync contacts
 @router.post("/sync", response_model=SyncResponse)
 async def sync_contatos(
     payload: SyncPayload,

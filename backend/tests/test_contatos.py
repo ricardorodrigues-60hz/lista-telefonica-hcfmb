@@ -3,18 +3,18 @@
 import uuid
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.config import settings
+from app.modules.contatos.repository import ContatoRepository
 from app.modules.contatos.schemas import (
     ContatoCreate,
     ContatoSync,
     SyncPayload,
 )
-from app.modules.contatos.repository import ContatoRepository
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 BASE_PATH = settings.API_BASE
+
 
 # Helper to build JSON payload from Pydantic model (dict())
 def contato_create_payload(user_id: str) -> dict:
@@ -26,14 +26,18 @@ def contato_create_payload(user_id: str) -> dict:
         tipo_numero="publico",
     ).model_dump(mode="json")
 
+
 @pytest.mark.anyio
 async def test_get_contatos_empty(client: AsyncClient):
     response = await client.get(f"{BASE_PATH}/contatos/")
     assert response.status_code == 200
     assert response.json() == []
 
+
 @pytest.mark.anyio
-async def test_create_contato_success(client: AsyncClient, db_session: AsyncSession, create_user_permission):
+async def test_create_contato_success(
+    client: AsyncClient, db_session: AsyncSession, create_user_permission
+):
     gestor_id = "gestor-1"
     await create_user_permission(gestor_id, role="GESTOR")
     payload = contato_create_payload(gestor_id)
@@ -51,8 +55,11 @@ async def test_create_contato_success(client: AsyncClient, db_session: AsyncSess
     # Keep the created ID for later tests
     return data["id"]
 
+
 @pytest.mark.anyio
-async def test_create_contato_forbidden(client: AsyncClient, db_session: AsyncSession, create_user_permission):
+async def test_create_contato_forbidden(
+    client: AsyncClient, db_session: AsyncSession, create_user_permission
+):
     consultor_id = "consultor-1"
     await create_user_permission(consultor_id, role="CONSULTOR")
     payload = contato_create_payload(consultor_id)
@@ -64,8 +71,11 @@ async def test_create_contato_forbidden(client: AsyncClient, db_session: AsyncSe
     assert response.status_code == 403
     assert response.json()["detail"] == "Operação permitida apenas para Gestores."
 
+
 @pytest.mark.anyio
-async def test_delete_contato_success(client: AsyncClient, db_session: AsyncSession, create_user_permission):
+async def test_delete_contato_success(
+    client: AsyncClient, db_session: AsyncSession, create_user_permission
+):
     gestor_id = "gestor-del"
     await create_user_permission(gestor_id, role="GESTOR")
     # Primeiro cria um contato
@@ -90,8 +100,11 @@ async def test_delete_contato_success(client: AsyncClient, db_session: AsyncSess
     assert contato is not None
     assert contato.excluido is True
 
+
 @pytest.mark.anyio
-async def test_sync_contatos(client: AsyncClient, db_session: AsyncSession, create_user_permission):
+async def test_sync_contatos(
+    client: AsyncClient, db_session: AsyncSession, create_user_permission
+):
     gestor_id = "gestor-sync"
     await create_user_permission(gestor_id, role="GESTOR")
     # Cria um contato inicialmente

@@ -43,7 +43,7 @@ import {
 import { db, type LocalContato } from '../db/db';
 
 // Prefixo base do sub-app para as rotas da API no monólito/proxy
-const API_BASE = '/lista-telefonica/api';
+const API_BASE = '/lista-telefonica';
 
 export default function Home() {
   // ==========================================
@@ -330,8 +330,10 @@ export default function Home() {
     // 2. Envio Assíncrono ao Servidor Central (se online)
     if (isOnline) {
       try {
-        const res = await fetch(`${API_BASE}/contatos/criar-editar`, {
-          method: 'POST',
+        const url = editingContactId ? `${API_BASE}/contatos/${editingContactId}` : `${API_BASE}/contatos`;
+        const method = editingContactId ? 'PUT' : 'POST';
+        const res = await fetch(url, {
+          method,
           headers: {
             'Content-Type': 'application/json',
             'x-user-id': userId
@@ -344,6 +346,7 @@ export default function Home() {
             tipo_numero: formTipo
           })
         });
+
         
         if (res.ok) {
           await db.contatos.update(id, { sincronizado: true });
@@ -365,14 +368,14 @@ export default function Home() {
     // 2. Envio da exclusão ao Servidor Central (se online)
     if (isOnline) {
       try {
-        const res = await fetch(`${API_BASE}/contatos/deletar`, {
-          method: 'POST',
+        const res = await fetch(`${API_BASE}/contatos/${id}`, {
+          method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
             'x-user-id': userId
-          },
-          body: JSON.stringify({ id })
+          }
         });
+
         if (res.ok) {
           // Se confirmado pelo servidor, limpa o registro fisicamente do IndexedDB local
           await db.contatos.delete(id);

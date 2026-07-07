@@ -1,5 +1,4 @@
 import logging
-import os
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
@@ -35,24 +34,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Aggregate API router with prefixes compatible with existing paths
-api_router = APIRouter()
-api_router.include_router(contatos_router, prefix="/contatos", tags=["Contatos"])
+# Include the contatos router under the RESTful base path
+app.include_router(contatos_router, prefix=f"{settings.API_BASE}/contatos", tags=["Contatos"])
 
-# Mount under the configurable API base. Default is `/lista-telefonica/api` for
-# embedding in host systems.
-app.include_router(api_router, prefix=settings.API_BASE)
-
-
+# Root endpoint showing API base information
 @app.get("/")
 async def read_root():
     return {
         "message": "Aciono Você API",
-        "api_base": "/lista-telefonica/api",
-        "docs": "/lista-telefonica/api/docs",
+        "api_base": "/lista-telefonica",
+        "docs": "/lista-telefonica/docs",
     }
-
-
-@app.get(settings.API_BASE)
-async def read_api_root():
-    return {"message": "Aciono Você API!"}
