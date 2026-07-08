@@ -14,7 +14,7 @@ This file implements the main **React** component for the *Lista Telefônica* su
 ## Key Constants
 - **`API_BASE`** – Base path for all backend requests.
   ```ts
-  const API_BASE = '/lista-telefonica/api';
+  const API_BASE = '/lista-telefonica';
   ```
 
 ## API Routes Used
@@ -22,10 +22,11 @@ This file implements the main **React** component for the *Lista Telefônica* su
 |------|-------------|---------|--------------------------------|
 | `${API_BASE}/contatos` | **GET** | Fetch the full list of contacts from the central server. | – |
 | `${API_BASE}/contatos/sync` | **POST** | Push locally‑modified contacts (offline changes) to the server in batch. | `{ contatos: LocalContato[] }` |
-| `${API_BASE}/contatos/criar-editar` | **POST** | Create a new contact or edit an existing one (optimistic UI). | `{ id, nome, telefone, email?, tipo_numero }` |
-| `${API_BASE}/contatos/deletar` | **POST** | Soft‑delete a contact on the server. | `{ id }` |
+| `${API_BASE}/contatos/` | **POST** | Create a new contact. | `{ id, nome, telefone, email?, tipo_numero }` |
+| `${API_BASE}/contatos/{id}` | **PUT** | Edit an existing contact. | `{ nome, telefone, email?, tipo_numero }` |
+| `${API_BASE}/contatos/{id}` | **DELETE** | Soft‑delete a contact on the server. | – |
 
-All requests include the header **`'x-user-id': userId`** so the backend can enforce role‑based permissions.
+All requests include the headers **`'x-user-id': userId`** and **`'Authorization': Bearer <TOKEN>`** so the backend can enforce role‑based permissions and authentication.
 
 ## Main Hooks & State
 | State | Type | Description |
@@ -51,11 +52,11 @@ All requests include the header **`'x-user-id': userId`** so the backend can enf
 - **Create / Edit** (`handleSaveContact`):
   1. Generates an UUID if needed.
   2. Writes contact locally (optimistic UI).
-  3. If online, POST to `/contatos/criar-editar`.
+  3. If online, POST to `/contatos/` or PUT to `/contatos/{id}`.
   4. On success, marks contact `sincronizado: true`.
 - **Delete** (`handleDeleteContact`):
   1. Soft‑deletes locally (`excluido: true`).
-  2. If online, POST to `/contatos/deletar`.
+  2. If online, DELETE to `/contatos/{id}`.
   3. On server success, removes record from IndexedDB.
 - **Sync** (`triggerSync`):
   - Collects all unsynced contacts, sends them to `/contatos/sync`.
@@ -100,7 +101,7 @@ import Home from './page';
 // Helper to mock fetch responses
 const mockFetch = (responses: Record<string, any>) => {
   global.fetch = jest.fn().mockImplementation((url: RequestInfo) => {
-    const endpoint = (url as string).replace(/^.*\/lista-telefonica\/api/, '');
+    const endpoint = (url as string).replace(/^.*\/lista-telefonica/, '');
     const response = responses[endpoint] ?? { status: 404 };
     return Promise.resolve({
       ok: response.ok ?? true,
@@ -126,7 +127,7 @@ describe('page.tsx – Lista Telefônica UI', () => {
     });
     render(<Home />);
     // Wait for the async loadContactsFromServer to finish
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/lista-telefonica/api/contatos', expect.any(Object)));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/lista-telefonica/contatos', expect.any(Object)));
     // Verify role badge shows GESTOR and Add button is present
     expect(screen.getByText(/ID: admin123 \(GESTOR\)/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Novo Ramal/i })).toBeInTheDocument();
@@ -150,8 +151,8 @@ describe('page.tsx – Lista Telefônica UI', () => {
     });
     // Mock POST endpoint for create/edit
     mockFetch({
+      '/contatos/': { ok: true },
       '/contatos': { body: [] },
-      '/contatos/criar-editar': { ok: true },
     });
     render(<Home />);
     // Open modal
@@ -164,7 +165,7 @@ describe('page.tsx – Lista Telefônica UI', () => {
     // Submit form
     fireEvent.click(screen.getByRole('button', { name: /Salvar Ramal/i }));
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(
-      '/lista-telefonica/api/contatos/criar-editar',
+      '/lista-telefonica/contatos/',
       expect.objectContaining({ method: 'POST' })
     ));
   });

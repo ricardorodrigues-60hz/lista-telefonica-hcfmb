@@ -38,7 +38,7 @@ async def test_get_contatos_empty(client: AsyncClient):
 async def test_create_contato_success(
     client: AsyncClient, db_session: AsyncSession, create_user_permission
 ):
-    gestor_id = "gestor-1"
+    gestor_id = "admin123"
     await create_user_permission(gestor_id, role="GESTOR")
     payload = contato_create_payload(gestor_id)
     response = await client.post(

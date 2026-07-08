@@ -36,8 +36,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { 
-  Phone, Mail, Search, Plus, Edit2, Trash2, Cloud, CloudOff, 
+import {
+  Phone, Mail, Search, Plus, Edit2, Trash2, Cloud, CloudOff,
   RefreshCw, Info, Wifi, WifiOff, X, User
 } from 'lucide-react';
 import { db, type LocalContato } from '../db/db';
@@ -46,25 +46,33 @@ import { db, type LocalContato } from '../db/db';
 const API_BASE = '/lista-telefonica';
 
 export default function Home() {
+  // TODO: Capturar token JWT real do sistema hospitalar pai (localStorage, cookies ou contexto)
+  const getAuthToken = () => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('jwt_token') || 'mock_jwt_token_temporario';
+    }
+    return 'mock_jwt_token_temporario';
+  };
+
   // ==========================================
   // ESTADOS DA APLICAÇÃO
   // ==========================================
-  
+
   // Identificação do usuário logado na intranet principal
   const [userId, setUserId] = useState<string>('admin123');
-  
+
   // Nível de acesso do usuário corrente resolvido a partir do ID
   const [userRole, setUserRole] = useState<'GESTOR' | 'CONSULTOR'>('GESTOR');
-  
+
   // Estados de conectividade de rede e sincronização em lote
   const [isOnline, setIsOnline] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'warning' | 'error', text: string } | null>(null);
-  
+
   // Filtros de busca digitada e categorias (institucional/público)
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'todos' | 'institucional' | 'publico'>('todos');
-  
+
   // Controle de estado e campos do formulário/modal (criação e edição de ramais)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingContactId, setEditingContactId] = useState<string | null>(null);
@@ -72,11 +80,11 @@ export default function Home() {
   const [formTelefone, setFormTelefone] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formTipo, setFormTipo] = useState<'institucional' | 'publico'>('publico');
-  
+
   // ==========================================
   // QUERIES DE BANCO LOCAL (Dexie.js / Live Queries)
   // ==========================================
-  
+
   // Obtém todos os contatos ativos locais que não foram marcados para exclusão lógica
   const localContacts = useLiveQuery(
     () => db.contatos.filter(c => !c.excluido).toArray()
@@ -90,7 +98,7 @@ export default function Home() {
   // ==========================================
   // EFEITOS DE INICIALIZAÇÃO E EVENTOS
   // ==========================================
-  
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       // 1. Registro Manual do Service Worker com escopo delimitado
@@ -106,10 +114,10 @@ export default function Home() {
       const params = new URLSearchParams(window.location.search);
       const queryUser = params.get('user_id');
       const activeUser = queryUser || localStorage.getItem('x-user-id') || 'admin123';
-      
+
       setUserId(activeUser);
       localStorage.setItem('x-user-id', activeUser);
-      
+
       // Regra de Permissão no Frontend:
       // O ID 'admin123' é mapeado como GESTOR de ramais. Demais IDs recebem visualização CONSULTOR (apenas leitura).
       const role = activeUser === 'admin123' ? 'GESTOR' : 'CONSULTOR';
@@ -117,16 +125,16 @@ export default function Home() {
 
       // 3. Gerenciamento do Status de Conexão (Online/Offline)
       setIsOnline(navigator.onLine);
-      
+
       const handleOnline = () => {
         setIsOnline(true);
         triggerSync(); // Sincroniza dados locais assim que restabelecer conexão
       };
       const handleOffline = () => setIsOnline(false);
-      
+
       window.addEventListener('online', handleOnline);
       window.addEventListener('offline', handleOffline);
-      
+
       return () => {
         window.removeEventListener('online', handleOnline);
         window.removeEventListener('offline', handleOffline);
@@ -144,7 +152,7 @@ export default function Home() {
   // ==========================================
   // COMUNICAÇÃO COM A API E SINCRONIZAÇÃO
   // ==========================================
-  
+
   /**
    * Puxa os dados atualizados do banco central e atualiza o IndexedDB local.
    * Preserva alterações locais ainda não sincronizadas antes de recriar o cache local.
@@ -152,23 +160,26 @@ export default function Home() {
   const loadContactsFromServer = async () => {
     try {
       const res = await fetch(`${API_BASE}/contatos`, {
-        headers: { 'x-user-id': userId }
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'x-user-id': userId
+        }
       });
-      
+
       if (res.ok) {
         const data = await res.json();
-        
+
         // Operação atômica em transação de escrita para evitar concorrência
         await db.transaction('rw', db.contatos, async () => {
           // Salva dados locais modificados offline para não sobresscrevê-los
           const unsynced = await db.contatos.filter(c => !c.sincronizado).toArray();
           await db.contatos.clear();
-          
+
           // Reinsere alterações locais offline pendentes
           for (const c of unsynced) {
             await db.contatos.put(c);
           }
-          
+
           // Insere registros válidos recebidos do servidor central
           for (const s of data) {
             const local = await db.contatos.get(s.id);
@@ -199,44 +210,45 @@ export default function Home() {
    */
   const triggerSync = async () => {
     if (!navigator.onLine || !userId) return;
-    
+
     setSyncing(true);
     setSyncMessage(null);
-    
+
     try {
       // Coleta alterações não sincronizadas
       const unsynced = await db.contatos.filter(c => !c.sincronizado).toArray();
-      
+
       if (unsynced.length === 0) {
         setSyncing(false);
         return;
       }
-      
+
       const payload = {
         contatos: unsynced.map(c => ({
           id: c.id,
           nome: c.nome,
           telefone: c.telefone,
-          email: c.email || '',
+          email: c.email || null,
           tipo_numero: c.tipo_numero,
           atualizado_em: c.atualizado_em,
           excluido: c.excluido
         }))
       };
-      
+
       const res = await fetch(`${API_BASE}/contatos/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
           'x-user-id': userId
         },
         body: JSON.stringify(payload)
       });
-      
+
       if (res.ok) {
         const result = await res.json();
         const syncedIds = result.contatos_atualizados || [];
-        
+
         await db.transaction('rw', db.contatos, async () => {
           for (const id of syncedIds) {
             const contact = await db.contatos.get(id);
@@ -251,7 +263,7 @@ export default function Home() {
             }
           }
         });
-        
+
         setSyncMessage({ type: 'success', text: `Sincronizado ${syncedIds.length} contato(s) com sucesso.` });
         await loadContactsFromServer();
       } else {
@@ -279,7 +291,7 @@ export default function Home() {
   // ==========================================
   // OPERAÇÕES CRUD (Escritas Locais e Instant Sync)
   // ==========================================
-  
+
   const openCreateModal = () => {
     setEditingContactId(null);
     setFormNome('');
@@ -300,18 +312,21 @@ export default function Home() {
 
   const handleSaveContact = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Generate a UUID with a fallback for environments where crypto.randomUUID is unavailable (e.g., jsdom in tests)
     const generateId = () => {
       if (typeof crypto !== 'undefined' && typeof (crypto as any).randomUUID === 'function') {
         return (crypto as any).randomUUID();
       }
-      // Simple fallback using random numbers
-      return Math.random().toString(36).substring(2, 15);
+      // UUID v4 fallback
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
     };
     const id = editingContactId || generateId();
     const now = new Date().toISOString();
-    
+
     const newContact: LocalContato = {
       id,
       nome: formNome,
@@ -322,32 +337,41 @@ export default function Home() {
       sincronizado: false,
       excluido: false
     };
-    
+
     // 1. Escrita Local Instantânea (Optimistic UI)
     await db.contatos.put(newContact);
     setIsModalOpen(false);
-    
+
     // 2. Envio Assíncrono ao Servidor Central (se online)
     if (isOnline) {
       try {
-        const url = editingContactId ? `${API_BASE}/contatos/${editingContactId}` : `${API_BASE}/contatos`;
+        const url = editingContactId ? `${API_BASE}/contatos/${editingContactId}` : `${API_BASE}/contatos/`;
         const method = editingContactId ? 'PUT' : 'POST';
+
+        const requestBody = editingContactId ? {
+          nome: formNome,
+          telefone: formTelefone,
+          email: formEmail || null,
+          tipo_numero: formTipo
+        } : {
+          id,
+          nome: formNome,
+          telefone: formTelefone,
+          email: formEmail || null,
+          tipo_numero: formTipo
+        };
+
         const res = await fetch(url, {
           method,
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${getAuthToken()}`,
             'x-user-id': userId
           },
-          body: JSON.stringify({
-            id,
-            nome: formNome,
-            telefone: formTelefone,
-            email: formEmail || null,
-            tipo_numero: formTipo
-          })
+          body: JSON.stringify(requestBody)
         });
 
-        
+
         if (res.ok) {
           await db.contatos.update(id, { sincronizado: true });
         }
@@ -359,12 +383,12 @@ export default function Home() {
 
   const handleDeleteContact = async (id: string, name: string) => {
     if (!confirm(`Deseja realmente excluir o contato ${name}?`)) return;
-    
+
     const now = new Date().toISOString();
-    
+
     // 1. Exclusão Lógica Local (Soft Delete)
     await db.contatos.update(id, { excluido: true, sincronizado: false, atualizado_em: now });
-    
+
     // 2. Envio da exclusão ao Servidor Central (se online)
     if (isOnline) {
       try {
@@ -372,6 +396,7 @@ export default function Home() {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${getAuthToken()}`,
             'x-user-id': userId
           }
         });
@@ -389,22 +414,22 @@ export default function Home() {
   // ==========================================
   // FILTRAGEM E ORDENAÇÃO DE RAMAIS
   // ==========================================
-  
+
   const filteredContacts = localContacts.filter(c => {
-    const matchesSearch = 
+    const matchesSearch =
       c.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.telefone.includes(searchQuery) ||
       (c.email && c.email.toLowerCase().includes(searchQuery.toLowerCase()));
-      
+
     const matchesType = filterType === 'todos' || c.tipo_numero === filterType;
-    
+
     return matchesSearch && matchesType;
   }).sort((a, b) => a.nome.localeCompare(b.nome));
 
   // ==========================================
   // RENDERIZAÇÃO DA INTERFACE DO SUBMÓDULO
   // ==========================================
-  
+
   return (
     <div className="subapp-container">
       {/* Header Compacto para Widget */}
@@ -416,16 +441,16 @@ export default function Home() {
             <p className="subtitle">Mapeamento integrado intranet</p>
           </div>
         </div>
-        
+
         {/* Barra de Status e Ferramentas */}
         <div className="header-actions">
           {/* Badge Simulador de Identidade (Apenas Teste/Dev) */}
           <div className="role-badge" title="Identidade simulada para controle de acessos">
             <User size={14} />
             <span>ID: {userId} ({userRole})</span>
-            <button 
-              type="button" 
-              className="switch-user-btn" 
+            <button
+              type="button"
+              className="switch-user-btn"
               onClick={() => handleSwitchUser(userId === 'admin123' ? 'colaborador456' : 'admin123')}
             >
               Alternar
@@ -438,9 +463,9 @@ export default function Home() {
           </div>
 
           {pendingSyncCount > 0 && (
-            <button 
+            <button
               className="sync-action-btn"
-              onClick={triggerSync} 
+              onClick={triggerSync}
               disabled={syncing || !isOnline}
               title={`${pendingSyncCount} pendentes de sincronização`}
             >
@@ -476,29 +501,29 @@ export default function Home() {
         <section className="search-filter-bar">
           <div className="search-box">
             <Search size={16} className="search-box-icon" />
-            <input 
-              type="text" 
-              placeholder="Buscar ramal ou setor..." 
+            <input
+              type="text"
+              placeholder="Buscar ramal ou setor..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          
+
           <div className="filter-group">
-            <button 
-              className={filterType === 'todos' ? 'active' : ''} 
+            <button
+              className={filterType === 'todos' ? 'active' : ''}
               onClick={() => setFilterType('todos')}
             >
               Todos
             </button>
-            <button 
-              className={filterType === 'institucional' ? 'active' : ''} 
+            <button
+              className={filterType === 'institucional' ? 'active' : ''}
               onClick={() => setFilterType('institucional')}
             >
               Institucionais
             </button>
-            <button 
-              className={filterType === 'publico' ? 'active' : ''} 
+            <button
+              className={filterType === 'publico' ? 'active' : ''}
               onClick={() => setFilterType('publico')}
             >
               Públicos
@@ -520,12 +545,12 @@ export default function Home() {
                     <CloudOff size={12} />
                   </div>
                 )}
-                
+
                 <div className="ramal-card-content">
                   <div className="ramal-badge" data-type={c.tipo_numero}>
                     {c.tipo_numero === 'institucional' ? 'INST' : 'PUBL'}
                   </div>
-                  
+
                   <div className="ramal-details">
                     <h3>{c.nome}</h3>
                     <p className="phone-number">{c.telefone}</p>
@@ -537,7 +562,7 @@ export default function Home() {
                     )}
                   </div>
                 </div>
-                
+
                 {/* UI Guard: Exibe ações de modificação (Editar/Excluir) apenas para GESTOR */}
                 {userRole === 'GESTOR' && (
                   <div className="ramal-card-actions">
@@ -565,56 +590,56 @@ export default function Home() {
                 <X size={18} />
               </button>
             </div>
-            
+
             <div className="modal-body">
               <div className="form-field">
                 <label htmlFor="formNome">Setor / Identificação</label>
-                 <input 
-                   id="formNome"
-                   type="text" 
-                   required 
-                   placeholder="Ex: Recepção PS"
-                   value={formNome}
-                   onChange={(e) => setFormNome(e.target.value)}
-                 />
+                <input
+                  id="formNome"
+                  type="text"
+                  required
+                  placeholder="Ex: Recepção PS"
+                  value={formNome}
+                  onChange={(e) => setFormNome(e.target.value)}
+                />
               </div>
-              
+
               <div className="form-field">
                 <label htmlFor="formTelefone">Número / Ramal</label>
-                 <input 
-                   id="formTelefone"
-                   type="text" 
-                   required 
-                   placeholder="Ex: (14) 3811-1234 ou 1234"
-                   value={formTelefone}
-                   onChange={(e) => setFormTelefone(e.target.value)}
-                 />
+                <input
+                  id="formTelefone"
+                  type="text"
+                  required
+                  placeholder="Ex: (14) 3811-1234 ou 1234"
+                  value={formTelefone}
+                  onChange={(e) => setFormTelefone(e.target.value)}
+                />
               </div>
-              
+
               <div className="form-field">
                 <label htmlFor="formEmail">Email Corporativo (Opcional)</label>
-                 <input 
-                   id="formEmail"
-                   type="email" 
-                   placeholder="Ex: contato@hcfmb.unesp.br"
-                   value={formEmail}
-                   onChange={(e) => setFormEmail(e.target.value)}
-                 />
+                <input
+                  id="formEmail"
+                  type="email"
+                  placeholder="Ex: contato@hcfmb.unesp.br"
+                  value={formEmail}
+                  onChange={(e) => setFormEmail(e.target.value)}
+                />
               </div>
-              
+
               <div className="form-field">
                 <label htmlFor="formTipo">Categoria de Ramal</label>
-                 <select 
-                   id="formTipo"
-                   value={formTipo}
-                   onChange={(e) => setFormTipo(e.target.value as 'institucional' | 'publico')}
-                 >
-                   <option value="publico">Público</option>
-                   <option value="institucional">Institucional (Restrito)</option>
-                 </select>
+                <select
+                  id="formTipo"
+                  value={formTipo}
+                  onChange={(e) => setFormTipo(e.target.value as 'institucional' | 'publico')}
+                >
+                  <option value="publico">Público</option>
+                  <option value="institucional">Institucional (Restrito)</option>
+                </select>
               </div>
             </div>
-            
+
             <div className="modal-footer">
               <button type="button" className="cancel-btn" onClick={() => setIsModalOpen(false)}>
                 Cancelar

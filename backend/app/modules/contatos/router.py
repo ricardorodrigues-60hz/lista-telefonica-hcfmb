@@ -1,4 +1,5 @@
 from typing import List
+from uuid import uuid4
 
 from app.core.auth import UsuarioAutenticado, get_current_user, require_gestor
 from app.core.database import get_db
@@ -39,8 +40,18 @@ async def create_contato(
     usuario: UsuarioAutenticado = Depends(require_gestor),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new contact via RESTful POST."""
+    """
+    Create a new contact via RESTful POST.
+    
+    O ID pode ser fornecido como UUID string ou deixado vazio.
+    Se omitido, o servidor gera um UUID automaticamente.
+    """
     repo = ContatoRepository(db)
+    
+    # Se ID não foi fornecido, gera um novo UUID
+    if not contato_in.id:
+        contato_in.id = str(uuid4())
+    
     return await repo.criar_contato(contato_in, usuario.usuario_id_externo)
 
 

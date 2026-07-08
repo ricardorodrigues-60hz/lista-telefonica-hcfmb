@@ -24,8 +24,8 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
-        source: '/lista-telefonica/api/:path*',
-        destination: 'http://127.0.0.1:8085/lista-telefonica/api/:path*',
+        source: '/lista-telefonica/contatos/:path*',
+        destination: 'http://127.0.0.1:8085/lista-telefonica/contatos/:path*',
         basePath: false,
       },
     ];

@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from app.main import app
 from app.core.config import settings
 from app.core.database import Base, get_db
-from app.modules.usuarios.repository import UsuarioRepository
 
 # ---------------------------------------------------------------------
 # Engine & Session fixtures (use the same DATABASE_URL from settings)
@@ -44,12 +43,6 @@ async def db_session(initialize_database) -> AsyncGenerator[AsyncSession, None]:
 # ---------------------------------------------------------------------
 # Override FastAPI dependencies
 # ---------------------------------------------------------------------
-@pytest.fixture
-def create_user_permission(db_session: AsyncSession):
-    async def _create_user_permission(external_id: str, role: str = "CONSULTOR"):
-        repo = UsuarioRepository(db_session)
-        await repo.salvar_permissao(usuario_id_externo=external_id, papel=role)
-    return _create_user_permission
 
 @pytest.fixture(autouse=True)
 def override_get_db(db_session: AsyncSession):
@@ -83,6 +76,5 @@ def random_uuid_str() -> str:
 __all__ = [
     "client",
     "db_session",
-    "create_user_permission",
     "random_uuid_str",
 ]
