@@ -10,10 +10,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from app.core import init_db
+    from app.core.init_db import inicializar_banco
 
     try:
-        await init_db.inicializar_banco()
+        await inicializar_banco()
     except Exception:
         logging.exception(
             "init_db.inicializar_banco() failed during startup; continuing without initializing database"
