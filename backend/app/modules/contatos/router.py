@@ -14,11 +14,11 @@ from app.modules.contatos.schemas import (
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-router = APIRouter(tags=["Contatos"])
+router = APIRouter(tags=["Contatos"], redirect_slashes=False)
 
 
 # List contacts
-@router.get("/", response_model=List[ContatoResponse])
+@router.get("", response_model=List[ContatoResponse])
 async def get_contatos(db: AsyncSession = Depends(get_db)):
     """
     Endpoint para listar todos os contatos ativos.
@@ -34,7 +34,7 @@ async def get_contatos(db: AsyncSession = Depends(get_db)):
 
 
 # Create contact (POST /)
-@router.post("/", response_model=ContatoResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ContatoResponse, status_code=status.HTTP_201_CREATED)
 async def create_contato(
     contato_in: ContatoCreate,
     usuario: UsuarioAutenticado = Depends(require_gestor),

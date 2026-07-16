@@ -177,8 +177,13 @@ class ContatoRepository:
             contato_db = await self.buscar_por_id(str(c.id)) if c.id else None
 
             if contato_db:
+                # Normaliza a data do banco para naive UTC para comparação segura
+                db_updated_at = contato_db.atualizado_em
+                if db_updated_at.tzinfo is not None:
+                    db_updated_at = db_updated_at.astimezone(timezone.utc).replace(tzinfo=None)
+
                 # CONFLITO: Só aceita se a alteração do cliente offline for mais nova do que a do banco.
-                if cliente_updated_at > contato_db.atualizado_em:
+                if cliente_updated_at > db_updated_at:
                     contato_db.nome = c.nome
                     contato_db.telefone = c.telefone
                     contato_db.email = c.email

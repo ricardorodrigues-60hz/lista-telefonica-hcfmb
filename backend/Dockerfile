@@ -21,4 +21,4 @@ USER app
 
 EXPOSE 8085
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8085"]
+CMD sh -c "if [ \"$RUN_SEEDS\" = \"1\" ]; then python -m scripts.seed_mock; fi && uvicorn app.main:app --host 0.0.0.0 --port 8085"

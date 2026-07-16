@@ -1,4 +1,22 @@
 services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: lista_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: lista_telefonica
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d lista_telefonica"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   backend:
     build: ./backend
     container_name: lista_backend_api
@@ -6,10 +24,13 @@ services:
       - "8085:8085"
     volumes:
       - ./backend:/app
-      - /app/venv # Ignora o venv local para não chocar com o do container
+      - /app/.venv # Ignora o venv local para não chocar com o do container
     environment:
-      - DATABASE_URL=sqlite+aiosqlite:///./lista.db
+      - DATABASE_URL=postgresql+asyncpg://postgres:admin@postgres:5432/lista_telefonica
       - RUN_SEEDS=1
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8085').getcode()==200 else 1)\""]
@@ -27,8 +48,10 @@ services:
       - /app/.next
       - /app/node_modules
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8085
+      - NEXT_PUBLIC_API_URL=http://backend:8085
     depends_on:
       - backend
     restart: unless-stopped
-      
+
+volumes:
+  postgres_data:

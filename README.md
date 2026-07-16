@@ -53,10 +53,3 @@ Prefere rodar sem Docker? Veja os READMEs internos:
 A autenticação é feita via header `x-user-id`. Sem JWT externo por enquanto — o sistema mapeia o ID para um papel fixo.
 
 ---
-
-## Roadmap
-
-- [x] MVP com CRUD de contatos e sincronização offline
-- [ ] Suporte a múltiplas unidades hospitalares
-- [ ] Rate-limiting e logging estruturado
-- [ ] CI/CD atualizado (GitHub Actions)

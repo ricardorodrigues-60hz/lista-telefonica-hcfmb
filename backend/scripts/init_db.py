@@ -9,6 +9,11 @@ import asyncio
 import sys
 import os
 
+
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 # Garante que o diretório raiz do backend esteja no PYTHONPATH
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
