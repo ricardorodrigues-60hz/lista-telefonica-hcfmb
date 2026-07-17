@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 from typing import List, Optional
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.modules.contatos.models import Contato
-from app.modules.contatos.schemas import ContatoCreate
+from app.modules.contatos.schemas import ContatoBase
 from app.modules.auditoria.repository import AuditoriaRepository
 
 
@@ -36,13 +37,15 @@ class ContatoRepository:
         result = await self.db.execute(select(Contato).where(Contato.id == contato_id))
         return result.scalars().first()
 
-    async def salvar_ou_atualizar(self, contato_in: ContatoCreate, usuario_nome: str) -> Contato:
-        """Cria ou atualiza um contato via painel (fluxo online).
+    async def salvar_ou_atualizar(
+        self, contato_id: UUID, contato_in: ContatoBase, usuario_nome: str
+    ) -> Contato:
+        """Cria ou atualiza (upsert) o contato identificado por `contato_id` (fluxo online).
 
-        Se o contato já existir (identificado por ID), é atualizado; caso
-        contrário, um novo contato é criado.
+        Se o contato já existir, é atualizado; caso contrário, um novo
+        contato é criado com esse mesmo ID (UUID gerado pelo cliente).
         """
-        contato = await self.buscar_por_id(str(contato_in.id)) if contato_in.id else None
+        contato = await self.buscar_por_id(str(contato_id))
         acao = "EDITAR" if contato else "CRIAR"
 
         now = _now_naive_utc()
@@ -56,7 +59,7 @@ class ContatoRepository:
             contato.excluido = False  # Reverte soft-delete se o contato for re-editado.
         else:
             contato = Contato(
-                id=str(contato_in.id),  # Respeita o UUID já gerado pelo cliente
+                id=str(contato_id),  # Respeita o UUID já gerado pelo cliente
                 nome=contato_in.nome,
                 telefone=contato_in.telefone,
                 email=contato_in.email,

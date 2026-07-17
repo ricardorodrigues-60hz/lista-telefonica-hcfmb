@@ -306,14 +306,13 @@ export default function Home() {
     if (isOnline) {
       // If we are online, also hit the online direct CRUD endpoint
       try {
-        const res = await fetch(`${API_BASE}/contatos/criar-editar`, {
-          method: 'POST',
+        const res = await fetch(`${API_BASE}/contatos/${id}`, {
+          method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
-            id,
             nome: formNome,
             telefone: formTelefone,
             email: formEmail || null,
@@ -340,13 +339,11 @@ export default function Home() {
     
     if (isOnline) {
       try {
-        const res = await fetch(`${API_BASE}/contatos/deletar`, {
-          method: 'POST',
+        const res = await fetch(`${API_BASE}/contatos/${id}`, {
+          method: 'DELETE',
           headers: {
-            'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ id })
+          }
         });
         if (res.ok) {
           // Delete completely if server confirms

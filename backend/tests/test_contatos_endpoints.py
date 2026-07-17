@@ -27,8 +27,8 @@ class FakeRepo:
     async def listar_ativos(self):
         return [FakeContato(nome="A"), FakeContato(nome="B")]
 
-    async def salvar_ou_atualizar(self, contato_in, usuario_email):
-        return FakeContato(id=contato_in.id, nome=contato_in.nome)
+    async def salvar_ou_atualizar(self, contato_id, contato_in, usuario_email):
+        return FakeContato(id=contato_id, nome=contato_in.nome)
 
     async def deletar_soft(self, contato_id, usuario_email):
         return True
@@ -69,10 +69,9 @@ async def test_consultor_nao_pode_criar_contato(monkeypatch):
     )()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        r = await ac.post(
-            "/api/contatos/criar-editar",
+        r = await ac.put(
+            f"/api/contatos/{uuid4()}",
             json={
-                "id": str(uuid4()),
                 "nome": "Novo Contato",
                 "telefone": "(14) 3811-9999",
                 "tipo_numero": "publico",
@@ -96,10 +95,9 @@ async def test_gestor_pode_criar_contato(monkeypatch):
     )()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        r = await ac.post(
-            "/api/contatos/criar-editar",
+        r = await ac.put(
+            f"/api/contatos/{uuid4()}",
             json={
-                "id": str(uuid4()),
                 "nome": "Novo Contato",
                 "telefone": "(14) 3811-9999",
                 "tipo_numero": "publico",
@@ -107,6 +105,44 @@ async def test_gestor_pode_criar_contato(monkeypatch):
         )
 
     assert r.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_gestor_pode_deletar_contato(monkeypatch):
+    import app.modules.contatos.router as contatos_mod
+
+    monkeypatch.setattr(contatos_mod, "ContatoRepository", lambda db: FakeRepo(db))
+
+    from app.modules.auth.service import get_current_user
+
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_current_user] = lambda: type(
+        "U", (), {"nome": "Tester", "email": "gestor@example.com", "papel": "GESTOR"}
+    )()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        r = await ac.delete(f"/api/contatos/{uuid4()}")
+
+    assert r.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_consultor_nao_pode_deletar_contato(monkeypatch):
+    import app.modules.contatos.router as contatos_mod
+
+    monkeypatch.setattr(contatos_mod, "ContatoRepository", lambda db: FakeRepo(db))
+
+    from app.modules.auth.service import get_current_user
+
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_current_user] = lambda: type(
+        "U", (), {"nome": "Tester", "email": "tester@example.com", "papel": "CONSULTOR"}
+    )()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        r = await ac.delete(f"/api/contatos/{uuid4()}")
+
+    assert r.status_code == 403
 
 
 @pytest.mark.asyncio
