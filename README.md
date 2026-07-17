@@ -4,29 +4,33 @@
 > **Sistema de alta criticidade** para gerenciamento de ramais e contatos institucionais, projetado para funcionar com plena capacidade mesmo em ausência de conexão de rede.
 
 ## Índice
-- [Visão Geral](#-visão-geral-da-arquitetura)
-- [Estrutura do Projeto](#-estrutura-do-projeto)
-- [Modelo de Dados](#-modelo-de-dados-e-contrato-de-sincronização)
+- [Visão Geral da Arquitetura](#-visão-geral-da-arquitetura)
+- [Estrutura do Projeto](#️-estrutura-do-projeto)
+- [Modelo de Dados e Sincronização](#-modelo-de-dados-e-contrato-de-sincronização)
+- [Segurança, RBAC e Auditoria](#-segurança-rbac-e-auditoria)
+- [Endpoints da API](#-endpoints-da-api)
 - [Como Começar](#-como-começar)
-- [Arquitetura Detalhada](#-arquitetura-offline-first-em-detalhes)
-- [Segurança e Auditoria](#-segurança-e-auditoria)
-- [Teste e Qualidade](#-testes-e-qualidade)
+- [Variáveis de Ambiente](#️-variáveis-de-ambiente)
+- [Testes Automatizados](#-testes-automatizados)
+- [Desenvolvimento e Extensão](#-desenvolvimento-e-extensão)
 - [Deployment](#-deployment)
+- [Decisões de Arquitetura](#️-decisões-de-arquitetura)
+- [Tecnologias](#-tecnologias)
 
 ---
 
 ## 📐 Visão Geral da Arquitetura
 
-O projeto adota uma arquitetura **Offline-First** com sincronização bidirecional baseada em UUID, timestamp UTC e Soft Delete. Os dados vivem simultaneamente no IndexedDB do navegador (via Dexie.js) e no banco SQLite do servidor (via aiosqlite + SQLAlchemy assíncrono). A resolução de conflitos é feita por comparação de `atualizado_em` — a modificação mais recente vence.
+O projeto adota uma arquitetura **Offline-First** com sincronização bidirecional baseada em UUID, timestamp UTC e Soft Delete. Os dados vivem simultaneamente no IndexedDB do navegador (via Dexie.js) e no banco do servidor (SQLite via `aiosqlite` por padrão, com SQLAlchemy assíncrono). A resolução de conflitos é feita por comparação de `atualizado_em` — a modificação mais recente vence (*last-write-wins*).
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         CLIENTE (PWA)                           │
 │   Next.js 16 (App Router)  ·  React 19  ·  TypeScript           │
 │   Dexie.js → IndexedDB (dados locais, sempre disponíveis)       │
-│   Service Worker → Cache de assets estáticos                    │
+│   Service Worker (@ducanh2912/next-pwa) → cache de assets       │
 └─────────────────────┬───────────────────────────────────────────┘
-                      │  Sync via POST /api/contatos/sync
+                      │  Sync via POST /api/sync
                       │  (payload: UUID + atualizado_em UTC + excluido)
 ┌─────────────────────▼───────────────────────────────────────────┐
 │                     SERVIDOR (Backend API)                      │
@@ -37,51 +41,55 @@ O projeto adota uma arquitetura **Offline-First** com sincronização bidirecion
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+> O backend está pronto para PostgreSQL em produção (basta trocar `DATABASE_URL` para uma URL `postgresql+asyncpg://...` e adicionar `asyncpg` às dependências); por padrão, tanto localmente quanto no `docker-compose.yml`, usa-se SQLite.
+
+Para detalhes de implementação de cada camada, veja também:
+- [`backend/README.md`](backend/README.md) — arquitetura modular, endpoints e troubleshooting do backend.
+- [`frontend/README.md`](frontend/README.md) — lógica de sincronização offline, PWA e schema do Dexie.js.
+
 ---
 
 ## 🗂️ Estrutura do Projeto
 
 ```
 lista_telefonica_acionovoce/
-├── backend/                     # API FastAPI
+├── backend/                         # API FastAPI
 │   ├── app/
 │   │   ├── core/
-│   │   │   ├── auth.py          # JWT, OAuth2, require_gestor/require_consultor (RBAC)
-│   │   │   ├── config.py        # Settings via pydantic_settings (.env)
-│   │   │   ├── init_db.py       # Criação de tabelas e seed de dados (e-mail + senha)
-│   │   │   └── passwords.py     # bcrypt async (thread pool)
-│   │   ├── models/
-│   │   │   └── models.py        # SQLAlchemy ORM: Usuario, RefreshToken, Contato, AuditTrail
-│   │   ├── repositories/
-│   │   │   ├── contatos.py      # ContatoRepository (CRUD + sincronização em lote)
-│   │   │   └── usuarios.py      # UsuarioRepository + RefreshTokenRepository
-│   │   ├── routers/
-│   │   │   ├── auth.py          # /api/auth/login · /refresh · /logout
-│   │   │   ├── contatos.py      # /api/contatos/ · /criar-editar · /deletar · /sync
-│   │   │   └── usuarios.py      # /api/usuarios/ (CRUD, restrito a GESTOR)
-│   │   ├── schemas/
-│   │   │   ├── auth.py          # LoginRequest, TokenResponse, RefreshRequest, LogoutRequest
-│   │   │   ├── contatos.py      # ContatoCreate, ContatoSync, SyncPayload, SyncResponse
-│   │   │   └── usuarios.py      # UsuarioCreate, UsuarioUpdate, UsuarioResponse
-│   │   ├── database.py          # Engine, session maker, Base declarativa
-│   │   └── main.py              # FastAPI app, CORS, lifespan, montagem de rotas
-│   ├── tests/                   # Suíte pytest (27 testes, 100% passando)
-│   ├── Dockerfile               # Imagem de produção (app.main:app, sem --reload)
+│   │   │   ├── config.py            # Settings via pydantic_settings (.env)
+│   │   │   ├── database.py          # Engine assíncrono, session maker, Base declarativa
+│   │   │   ├── exceptions.py        # Exceções de domínio + exception handlers
+│   │   │   ├── init_db.py           # Criação de tabelas e seed (usuários + contatos demo)
+│   │   │   ├── logging.py           # Configuração de logging da aplicação
+│   │   │   └── security.py          # JWT, bcrypt assíncrono (thread pool), oauth2_scheme
+│   │   ├── modules/                 # Um módulo de domínio por pasta (models/repository/router/schemas)
+│   │   │   ├── auth/                # Login, refresh (rotação), logout, RBAC (require_gestor/require_consultor)
+│   │   │   ├── usuarios/            # CRUD de usuários (restrito a GESTOR)
+│   │   │   ├── contatos/            # CRUD de contatos + soft delete
+│   │   │   ├── sync/                # Sincronização offline-first (last-write-wins)
+│   │   │   └── auditoria/           # AuditTrail (models + repository)
+│   │   ├── api.py                   # Agrega os routers de todos os módulos em api_router
+│   │   └── main.py                  # FastAPI app, CORS, lifespan (seeds), montagem de rotas
+│   ├── migrations/                  # Alembic (versions/, env.py)
+│   ├── tests/                       # Suíte pytest + pytest-asyncio
+│   ├── alembic.ini
+│   ├── Dockerfile                   # Imagem de produção (uvicorn app.main:app, porta 8085)
 │   └── requirements.txt
 │
-├── frontend/                    # PWA Next.js
+├── frontend/                        # PWA Next.js
 │   ├── src/
 │   │   ├── app/
-│   │   │   ├── page.tsx         # Aplicação principal (login, CRUD, sync, offline)
+│   │   │   ├── page.tsx             # Aplicação principal (login, CRUD, sync, offline)
 │   │   │   ├── layout.tsx
-│   │   │   └── globals.css      # Design System — paleta HCFMB
+│   │   │   └── globals.css          # Design System — paleta HCFMB
 │   │   └── db/
-│   │       └── db.ts            # Dexie.js schema (LocalContato, AcionoVoceDB)
-│   ├── public/                  # Manifest PWA, ícones
-│   ├── Dockerfile               # Imagem de produção (npm run build + npm run start)
+│   │       └── db.ts                # Dexie.js schema (LocalContato, AcionoVoceDB)
+│   ├── public/                      # Manifest PWA, Service Worker (sw.js), ícones
+│   ├── Dockerfile                   # Imagem de produção (npm run build + npm run start, porta 8086)
 │   └── package.json
 │
-├── docker-compose.yml           # Orquestração completa (backend + frontend)
+├── .github/workflows/ci.yml         # CI: roda a suíte pytest do backend a cada push/PR
+├── docker-compose.yml               # Orquestração local (backend + frontend, SQLite)
 └── README.md
 ```
 
@@ -93,92 +101,228 @@ lista_telefonica_acionovoce/
 
 | Campo | Tipo (Python) | Tipo (TypeScript) | Papel |
 |---|---|---|---|
-| `id` | `UUID` | `string` | Chave primária, gerada pelo **cliente** (UUIDv4) |
+| `id` | `str` (UUID) | `string` | Chave primária, gerada pelo **cliente** (UUIDv4) |
 | `nome` | `str` | `string` | Nome do contato ou setor |
 | `telefone` | `str` | `string` | Validado com regex (mín. 8 dígitos) |
 | `email` | `Optional[EmailStr]` | `string?` | Opcional |
-| `tipo_numero` | `TipoNumero` (Enum) | `'institucional' \| 'publico'` | Classificação do ramal |
+| `tipo_numero` | `TipoNumero` (Enum: `institucional`/`publico`) | `'institucional' \| 'publico'` | Classificação do ramal |
 | `atualizado_em` | `datetime` (UTC, timezone-aware) | `string` (ISO 8601) | **Árbitro de conflitos** na sincronização |
 | `excluido` | `bool` | `boolean` | Flag de Soft Delete |
 | `criado_em` | `datetime` (UTC) | — | Histórico de criação (servidor) |
-| `sincronizado` | — | `boolean` | Estado local do Dexie.js (não vai ao servidor) |
+| `sincronizado` | — | `boolean` | Estado local do Dexie.js (nunca é enviado ao servidor) |
 
-### Regra de Resolução de Conflitos Offline
+### Regra de Resolução de Conflitos Offline (last-write-wins)
 
 ```
 SE (contato já existe no servidor):
     SE (cliente.atualizado_em > servidor.atualizado_em):
-        Cliente vence (envia alterações)
+        → Aceita a versão do cliente (vitória da edição offline mais recente)
     SENÃO:
+        → Ignora (servidor já tem a versão mais atual)
+SENÃO:
+    → Cria novo contato (registro criado inteiramente offline)
+```
+
 ### Fluxo de Sincronização Bidirecional
 
 1. **Operação Local (Offline):** Usuário cria/edita contato → Dexie.js + `sincronizado: false`
-2. **Retorna Online:** Service Worker detecta → `window.online` event
-3. **Coleta de Pendências:** Frontend agrupa todos `{ id, atualizado_em, excluido }` com `sincronizado: false`
-4. **POST /api/contatos/sync:** Envia payload para servidor (JWT bearer token obrigatório)
-5. **Comparação no Servidor:** 
-   - Se `cliente.atualizado_em > servidor.atualizado_em` → cliente vence
-   - Caso contrário → servidor vence, cliente recebe delta
-6. **Persistência Local:** Frontend marca como `sincronizado: true` ou remove se `excluido: true`
+2. **Retorna Online:** listener de `window.online` dispara a sincronização
+3. **Coleta de Pendências:** Frontend agrupa todos `{ id, nome, telefone, email, tipo_numero, atualizado_em, excluido }` com `sincronizado: false`
+4. **POST /api/sync:** Envia o payload para o servidor (JWT bearer token obrigatório — qualquer papel autenticado)
+5. **Comparação no Servidor:** `SyncService` aplica a regra last-write-wins descrita acima, registrando auditoria de cada alteração aceita
+6. **Persistência Local:** Frontend marca como `sincronizado: true` usando a lista `contatos_atualizados` da resposta
 7. **Notificação:** UI atualiza em tempo real via `useLiveQuery` do Dexie.js
-
-### Camadas de Segurança
-
-- **JWT Access Token:** curta duração (30 min default), renovado via `/api/auth/refresh`
-- **Refresh Token com rotação real:** persistido (hash) em `refresh_tokens`; cada uso invalida o token anterior e reuso revoga todas as sessões
-- **Senha Hash:** bcrypt assíncrono com salt automático
-- **Soft Delete:** Dados nunca desaparecem (apenas `excluido: true`) — vale tanto para `contatos` quanto para `usuarios`
-- **Audit Trail:** Cada operação registra `usuario_nome` (e-mail de quem executou), `acao`, `tabela`, `registro_id` e `dados_modificados` (JSON) de forma imutável
-- **RBAC:** Dependências `require_gestor` (leitura+escrita) e `require_consultor` (qualquer papel autenticado)
 
 ---
 
-## 🔐 Segurança e Auditoria
+## 🔐 Segurança, RBAC e Auditoria
 
-### Endpoints de Autenticação
+O sistema implementa dois papéis de usuário, protegidos por JWT com **rotação real de Refresh Token**:
+
+| Papel | Permissões |
+|---|---|
+| **GESTOR** | Visualizar, criar, editar e excluir contatos; gerenciar usuários |
+| **CONSULTOR** | Somente visualizar contatos e sincronizar |
+
+- **JWT Access Token:** curta duração (`ACCESS_TOKEN_EXPIRE_MINUTES`, 30 min por padrão), renovado via `/api/auth/refresh`
+- **Refresh Token com rotação real:** persistido (hash) em `refresh_tokens`; cada uso invalida o token anterior. Reapresentar um token já rotacionado/revogado indica possível roubo de token e **revoga automaticamente todas as sessões do usuário**
+- **Senha Hash:** bcrypt assíncrono (executado em thread pool para não bloquear o event loop)
+- **Soft Delete:** dados nunca desaparecem (apenas `excluido: true`) — vale tanto para `contatos` quanto para `usuarios`
+- **Audit Trail (`audit_trail`):** cada operação de escrita (via painel ou via `/sync`) registra `usuario_nome`, `acao`, `tabela`, `registro_id`, `detalhes` e `dados_modificados` (JSON) de forma imutável
+- **RBAC:** dependências `require_gestor` e `require_consultor` (qualquer papel autenticado), definidas em `app/modules/auth/service.py`
+
+### Contas Padrão (criadas automaticamente via `RUN_SEEDS=1`)
+
+| Papel | E-mail | Senha |
+|---|---|---|
+| Gestor | `gestor@hcfmb.unesp.br` | `gestor123` |
+| Consultor | `consultor@hcfmb.unesp.br` | `consultor123` |
+
+> ⚠️ **Altere as senhas padrão antes de qualquer deploy em produção.** O seed também é desativado por padrão (`RUN_SEEDS=0`) para não rodar acidentalmente em testes/CI.
+
+---
+
+## 📡 Endpoints da API
+
+### Autenticação (`/api/auth`)
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
-| `POST` | `/api/auth/login` | Login com e-mail (`login`) + `senha` |
+| `POST` | `/api/auth/login` | Login com `login` (e-mail) + `senha` → access + refresh token |
 | `POST` | `/api/auth/refresh` | Rotaciona o par de tokens (revoga o refresh usado) |
-| `POST` | `/api/auth/logout` | Revoga o refresh token da sessão atual |
+| `POST` | `/api/auth/logout` | Revoga o refresh token da sessão atual (204) |
 
-### Endpoints de Contatos
+### Usuários (`/api/usuarios`) — restrito a GESTOR, exceto `/me`
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| `GET` | `/api/usuarios/me` | Dados do próprio usuário autenticado |
+| `GET` | `/api/usuarios/` | Lista usuários ativos |
+| `GET` | `/api/usuarios/{id}` | Obtém um usuário por ID |
+| `POST` | `/api/usuarios/` | Cria um novo usuário |
+| `PUT` | `/api/usuarios/{id}` | Atualiza nome/papel/senha |
+| `DELETE` | `/api/usuarios/{id}` | Soft delete (não é possível excluir o próprio usuário) |
+
+### Contatos (`/api/contatos`)
 | Método | Endpoint | Perfil | Descrição |
 |--------|----------|--------|-----------|
-| `GET` | `/api/contatos/` | Consultor+ | Lista paginada (sem soft-deletados) |
-| `POST` | `/api/contatos/criar-editar` | Gestor | Cria ou atualiza contato |
-| `DELETE` | `/api/contatos/deletar/{id}` | Gestor | Marca como `excluido: true` |
-| `POST` | `/api/contatos/sync` | Consultor+ | Sincronização bidirecional offline |
+| `GET` | `/api/contatos/` | Consultor+ | Lista todos os contatos ativos |
+| `POST` | `/api/contatos/criar-editar` | Gestor | Cria ou atualiza um contato |
+| `POST` | `/api/contatos/deletar` | Gestor | Soft delete via `{ "id": "<uuid>" }` no corpo |
 
-### Trilha de Auditoria
-Toda escrita (`criar`, `atualizar`, `deletar`, incluindo as originadas por `/sync`) registra em `audit_trail`:
+### Sincronização (`/api/sync`)
+| Método | Endpoint | Perfil | Descrição |
+|--------|----------|--------|-----------|
+| `POST` | `/api/sync` | Consultor+ | Sincronização bidirecional em lote (offline → servidor) |
+
+**Payload:**
 ```json
 {
-  "id": 42,
-  "usuario_nome": "gestor@hcfmb.unesp.br",
-  "acao": "EDITAR",
-  "tabela": "contatos",
-  "registro_id": "<contato_uuid>",
-  "detalhes": "Contato Novo Nome (...) editado via painel online.",
-  "dados_modificados": "{\"nome\": \"Novo Nome\", \"telefone\": \"...\"}",
-  "criado_em": "2026-06-24T15:30:45Z"
+  "contatos": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "nome": "Portaria Principal",
+      "telefone": "(14) 3811-1500",
+      "email": "portaria@hcfmb.unesp.br",
+      "tipo_numero": "publico",
+      "atualizado_em": "2026-06-22T12:00:00Z",
+      "excluido": false
+    }
+  ],
+  "ultima_sincronizacao": null
 }
+```
+
+**Resposta:**
+```json
+{
+  "sucesso": true,
+  "contatos_atualizados": ["550e8400-e29b-41d4-a716-446655440000"],
+  "error": null
+}
+```
+
+> O campo de retorno é **`contatos_atualizados`** (lista de UUIDs confirmados). O frontend usa essa lista para marcar os registros locais do Dexie.js como `sincronizado: true`.
+
+---
+
+## 🚀 Como Começar
+
+### Pré-requisitos
+- **Backend:** Python 3.11+
+- **Frontend:** Node.js 20+, npm 10+
+- **Containerização (opcional):** Docker Desktop
+
+### Inicialização Rápida (Docker Compose)
+
+```bash
+git clone <seu-repo> lista_telefonica_acionovoce
+cd lista_telefonica_acionovoce
+
+docker compose up -d --build
+```
+
+| Serviço | Container | Porta | URL |
+|---|---|---|---|
+| Backend API | `lista_backend_api` | `8085` | http://localhost:8085 (docs em `/docs`) |
+| Frontend PWA | `lista_frontend_pwa` | `8086` | http://localhost:8086 |
+
+O `docker-compose.yml` já sobe o backend com `RUN_SEEDS=1` (cria tabelas e as contas padrão acima) e usa SQLite (`sqlite+aiosqlite:///./lista.db`) — não é necessário nenhum banco externo para rodar localmente.
+
+```bash
+docker compose ps           # status dos containers
+docker compose logs -f      # logs em tempo real
+docker compose down         # parar e remover containers
+```
+
+### Desenvolvimento Local
+
+#### Backend
+```bash
+cd backend
+python -m venv .venv
+.\.venv\Scripts\activate          # Windows
+# source .venv/bin/activate       # Linux/macOS
+
+pip install -r requirements.txt
+
+# (Opcional) crie um .env — veja a seção "Variáveis de Ambiente"
+
+# Aplique as migrações Alembic
+alembic upgrade head
+
+# Inicie o servidor com seed automático de dados
+# Linux/macOS:
+RUN_SEEDS=1 uvicorn app.main:app --reload --host 0.0.0.0 --port 8085
+# Windows (PowerShell):
+$env:RUN_SEEDS="1"; uvicorn app.main:app --reload --port 8085
+```
+
+> API em **http://localhost:8085** · Swagger em **http://localhost:8085/docs**
+
+#### Frontend
+```bash
+cd frontend
+npm install
+npm run dev   # http://localhost:8086 (usa NEXT_PUBLIC_API_URL, default http://localhost:8085)
 ```
 
 ---
 
-## 🧪 Testes e Qualidade
+## ⚙️ Variáveis de Ambiente
 
-- **Framework:** pytest + pytest-asyncio (11 testes, 100% cobertura de rotas)
-- **Banco de Testes:** SQLite em memória para isolamento
-- **Execução:** `cd backend && pytest -v`
+Configuráveis via `.env` na pasta `backend/` (lidas por `app/core/config.py`):
 
-Casos cobertos:
-- ✅ Autenticação (login, refresh, tokens inválidos)
-- ✅ CRUD de contatos (criar, ler, atualizar, deletar)
-- ✅ Sincronização offline (conflitos, soft delete)
-- ✅ Validação de schemas (email, telefone, enums)
-- ✅ Permissõess (gestor vs consultor)
+| Variável | Default | Descrição |
+|---|---|---|
+| `DATABASE_URL` | `sqlite+aiosqlite:///:memory:` | URL do banco (SQLite local ou PostgreSQL via `asyncpg`) |
+| `SECRET_KEY` | chave de exemplo (**alterar em produção**) | Chave para assinar os tokens JWT |
+| `ALGORITHM` | `HS256` | Algoritmo JWT |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | Expiração do access token |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | `7` | Expiração do refresh token |
+| `TOKEN_URL` | `/api/auth/login` | Caminho usado pelo Swagger para autenticação (ajustar se montado como sub-app) |
+| `RUN_SEEDS` | `0` | Se `1`, cria tabelas e contas/contatos de demonstração no startup |
+
+No frontend, `NEXT_PUBLIC_API_URL` (lida em `frontend/src/app/page.tsx`) define a URL base da API.
+
+---
+
+## 🧪 Testes Automatizados
+
+```bash
+cd backend
+pytest -v
+```
+
+- **Framework:** pytest + pytest-asyncio + httpx (`ASGITransport`), banco SQLite em memória
+- **CI:** `.github/workflows/ci.yml` executa a suíte a cada push/PR
+
+| Arquivo de Teste | Cobertura |
+|---|---|
+| `test_auth_endpoints.py` | Login (sucesso/erro), rotação de refresh, reuso de token revogado, logout |
+| `test_blocking_password_ops.py` | Garante que hash/verificação de senha roda fora da thread principal |
+| `test_contatos_endpoints.py` | Listagem, criação e RBAC de escrita (GESTOR vs CONSULTOR) |
+| `test_schemas.py` | Validação Pydantic (telefone, e-mail, papel) |
+| `test_sync_endpoints.py` | Sincronização: criação offline, conflito last-write-wins, autenticação obrigatória |
+| `test_usuarios_endpoints.py` | CRUD de usuários e RBAC (restrito a GESTOR) |
 
 ---
 
@@ -186,16 +330,16 @@ Casos cobertos:
 
 ### Adicionar um Novo Campo em `Contato`
 
-1. **Backend:** 
-   - Edite `backend/app/models/models.py`
-   - Execute `alembic revision --autogenerate -m "Descrição"` + `alembic upgrade head`
-   - Atualize schema em `backend/app/schemas/contatos.py`
+1. **Backend:**
+   - Edite `backend/app/modules/contatos/models.py` (coluna SQLAlchemy)
+   - Atualize os schemas em `backend/app/modules/contatos/schemas.py` (e `backend/app/modules/sync/schemas.py`, se o campo participa da sincronização)
+   - Gere e aplique a migração: `alembic revision --autogenerate -m "Descrição"` + `alembic upgrade head`
 
 2. **Frontend:**
-   - Edite interface `LocalContato` em `frontend/src/db/db.ts`
-   - Atualize validação em `frontend/src/app/page.tsx`
+   - Edite a interface `LocalContato` em `frontend/src/db/db.ts` (e crie uma nova `db.version(n)` se alterar índices)
+   - Atualize formulário/validação em `frontend/src/app/page.tsx`
 
-3. **Testes:** Crie cenários em `backend/tests/test_contatos_endpoints.py`
+3. **Testes:** cubra o novo campo em `backend/tests/test_contatos_endpoints.py` e/ou `test_sync_endpoints.py`
 
 ### Integração num Portal Corporativo
 
@@ -209,29 +353,44 @@ portal = FastAPI(title="Portal Hospitalar")
 portal.mount("/lista-telefonica", lista_app)  # Monta em /lista-telefonica/*
 ```
 
+Ajuste `TOKEN_URL` no `.env` para o caminho completo (ex: `/lista-telefonica/api/auth/login`), garantindo que o Swagger UI autentique corretamente.
+
 ---
 
 ## 🚢 Deployment
 
-### Ambiente de Produção (docker-compose.yml)
+### `docker-compose.yml` (ambiente local/atual)
 
 ```yaml
 services:
   backend:
     build: ./backend
-    environment:
-      DATABASE_URL: postgresql+asyncpg://user:pass@db:5432/lista_telefonica
-      SECRET_KEY: <chave-secreta-production>
-      ALGORITHM: HS256
     ports:
-      - "8085:8000"
+      - "8085:8085"
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./lista.db
+      - RUN_SEEDS=1
 
   frontend:
     build: ./frontend
-    environment:
-      NEXT_PUBLIC_API_URL: https://api.hospital.br/lista-telefonica
     ports:
-      - "8086:3000"
+      - "8086:8086"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8085
+    depends_on:
+      - backend
+```
+
+### Evoluindo para Produção (PostgreSQL)
+
+Para produção recomenda-se substituir o SQLite por PostgreSQL, adicionando `asyncpg` a `backend/requirements.txt` e um serviço `db` ao compose:
+
+```yaml
+  backend:
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://user:pass@db:5432/lista_telefonica
+      - SECRET_KEY=<chave-secreta-de-produção>
+      - RUN_SEEDS=0
 
   db:
     image: postgres:15-alpine
@@ -244,312 +403,13 @@ services:
 ```
 
 **Checklist de Produção:**
-- [ ] Variáveis de ambiente configuradas (`.env.production`)
-- [ ] `SECRET_KEY` gerado com segurança (`openssl rand -hex 32`)
-- [ ] SSL/TLS ativado (nginx reverso proxy)
-- [ ] Backups automáticos do PostgreSQL
-- [ ] Logs centralizados (ELK, DataDog, etc)
-- [ ] Monitoramento de health checks (`/docs`)
-- [ ] Rate limiting ativado nos routers
-- [ ] CORS restrito a domínios confiáveis
-
----
-
-## 🚀 Como Começar
-
-### Pré-requisitos
-- **Backend:** Python 3.11+, PostgreSQL 14+
-- **Frontend:** Node.js 20+, npm 10+
-- **Containerização:** Docker Desktop
-
-### Inicialização Rápida (Docker Compose)
-
-```bash
-# 1. Clone o repositório
-git clone <seu-repo> lista_telefonica_acionovoce
-cd lista_telefonica_acionovoce
-
-# 2. Inicie toda a stack
-docker compose up -d --build
-
-# 3. Acesse a aplicação
-Frontend:   http://localhost:8086
-Backend:    http://localhost:8085
-Docs API:   http://localhost:8085/docs
-```
-
-**Credenciais de teste:**
-- Usuário: `RI98234` (gestor com permissão de escrita)
-- Usuário: `RI98235` (consultor com permissão de leitura)
-
-### Desenvolvimento Local
-
-#### Backend
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate  # Windows: .\.venv\Scripts\activate
-pip install -r requirements.txt
-
-# Configure seu .env
-cp .env.example .env  # Ajuste DATABASE_URL conforme necessário
-
-# Migrações e seed
-alembic upgrade head
-python -m app.core.init_db
-
-# Inicie o servidor (porta 8085)
-uvicorn app.main:app --reload --port 8085
-```
-
-#### Frontend
-```bash
-cd frontend
-npm install
-npm run dev  # Servidor em http://localhost:8086
-```
-
----
-
-## ✨ Principais Features
-
-| Feature | Descrição |
-|---------|-----------|
-| 🔌 **Offline-First** | Funciona sem internet; sincroniza automaticamente quando conectado |
-| 🔐 **RBAC (Gestor/Consultor)** | Controle granular de permissões com auditoria completa |
-| ⚡ **Async/Await** | Python 3.11 + FastAPI + SQLAlchemy 2.0 assíncrono |
-| 📱 **PWA** | Installável como app nativo; Service Worker para cache de assets |
-| 🎯 **Sincronização Inteligente** | Timestamp UTC + tipo_numero enum + soft delete |
-| 📊 **Auditoria Imutável** | Trilha completa de quem fez o quê e quando |
-| 🐳 **Container-Ready** | Docker Compose para dev, staging e produção |
-
----
-
-## 📚 Arquitetura Offline-First em Detalhes
-
-### Fluxo de Sincronização Bidirecional
-        → Aceita a versão do cliente (vitória da edição offline mais recente)
-    SENÃO:
-        → Ignora (servidor tem a versão mais atual)
-SENÃO:
-    → Cria novo contato (criado inteiramente offline)
-```
-
----
-
-## 🛠️ Pré-requisitos
-
-### Backend
-- Python 3.11+
-- `pip` para instalação de dependências
-- Ambiente virtual recomendado (`.venv`)
-
-### Frontend
-- Node.js 20+
-- npm 10+
-
----
-
-## ⚡ Instalação e Execução Local
-
-### 1. Clonar o repositório
-
-```bash
-git clone <URL_DO_REPOSITORIO>
-cd lista_telefonica_acionovoce
-```
-
-### 2. Backend
-
-```bash
-cd backend
-
-# Criar e ativar ambiente virtual
-python -m venv .venv
-.\.venv\Scripts\activate          # Windows
-# source .venv/bin/activate       # Linux/macOS
-
-# Instalar dependências
-pip install -r requirements.txt
-
-# Iniciar com seed de dados automático (cria tabelas + usuários padrão)
-RUN_SEEDS=1 uvicorn app.main:app --host 0.0.0.0 --port 8085
-# Windows (PowerShell):
-$env:RUN_SEEDS="1"; uvicorn app.main:app --host 0.0.0.0 --port 8085
-```
-
-> A API estará disponível em: **http://localhost:8085**
-> Documentação Swagger: **http://localhost:8085/docs**
-
-### 3. Frontend
-
-```bash
-cd frontend
-
-# Instalar dependências
-npm install
-
-# Iniciar servidor de desenvolvimento
-npm run dev
-```
-
-> O PWA estará disponível em: **http://localhost:8086**
-
----
-
-## 🐳 Execução com Docker Compose
-
-```bash
-# Na raiz do projeto — iniciar todos os serviços em background
-docker compose up -d --build
-
-# Verificar status dos containers
-docker compose ps
-
-# Acompanhar logs em tempo real
-docker compose logs -f
-
-# Parar e remover containers
-docker compose down
-```
-
-| Serviço | Container | Porta |
-|---|---|---|
-| Backend API | `lista_backend_api` | `8085` |
-| Frontend PWA | `lista_frontend_pwa` | `8086` |
-
----
-
-## 🔐 Controle de Acesso (RBAC)
-
-O sistema implementa dois papéis de usuário, protegidos por JWT com **rotação de Refresh Token**:
-
-| Papel | Permissões |
-|---|---|
-| **GESTOR** | Visualizar, buscar, criar, editar e excluir contatos. Gerenciar usuários. |
-| **CONSULTOR** | Somente visualizar e buscar contatos. |
-
-### Contas Padrão (criadas automaticamente via `RUN_SEEDS=1`)
-
-| Papel | E-mail | Senha |
-|---|---|---|
-| Gestor | `gestor@unesp.br` | `gestor123` |
-| Consultor | `consultor@unesp.br` | `consultor123` |
-
-> ⚠️ **Altere as senhas padrão antes de qualquer deploy em produção.**
-
-### Endpoints de Autenticação
-
-```
-POST /api/auth/login    → { login, senha } → access_token + refresh_token + papel + nome
-POST /api/auth/refresh  → Rotaciona tokens (revoga o antigo, emite novo par access + refresh)
-POST /api/auth/logout   → Revoga o refresh token da sessão atual (204)
-```
-
-A rotação é real: cada `refresh_token` só pode ser usado uma vez. Reapresentá-lo depois de
-já ter sido rotacionado revoga automaticamente todas as sessões do usuário (proteção contra
-token roubado).
-
----
-
-## 🔄 Endpoints de Sincronização
-
-```
-GET  /api/contatos/           → Lista todos os contatos ativos (qualquer papel autenticado)
-POST /api/contatos/criar-editar → Cria ou edita um contato (somente GESTOR)
-POST /api/contatos/deletar    → Soft Delete por UUID (somente GESTOR)
-POST /api/contatos/sync       → Sincronização em lote offline → servidor (qualquer autenticado)
-```
-
-### Payload de Sincronização (`POST /api/contatos/sync`)
-
-```json
-{
-  "contatos": [
-    {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "nome": "Portaria Principal",
-      "telefone": "(14) 3811-1500",
-      "email": "portaria@hcfmb.unesp.br",
-      "tipo_numero": "publico",
-      "atualizado_em": "2026-06-22T12:00:00Z",
-      "excluido": false
-    }
-  ]
-}
-```
-
-### Resposta de Sincronização
-
-```json
-{
-  "sucesso": true,
-  "contatos_atualizados": ["550e8400-e29b-41d4-a716-446655440000"]
-}
-```
-
-> O campo de retorno é **`contatos_atualizados`** (lista de UUIDs confirmados). O frontend usa essa lista para marcar os registros locais do Dexie.js como `sincronizado: true`.
-
----
-
-## 🧪 Testes Automatizados
-
-O projeto mantém uma suíte de testes assíncronos com **pytest + httpx** cobrindo os principais fluxos:
-
-```bash
-cd backend
-.\.venv\Scripts\python.exe -m pytest -v
-```
-
-| Arquivo de Teste | Cobertura |
-|---|---|
-| `test_auth_endpoints.py` | Login (sucesso/erro), rotação de refresh, reuso de token revogado, logout |
-| `test_blocking_password_ops.py` | Verificação de bcrypt fora da thread principal |
-| `test_contatos_endpoints.py` | Listagem, sincronização e RBAC de escrita (GESTOR vs CONSULTOR) |
-| `test_schemas.py` | Validação Pydantic (telefone, e-mail, papel) |
-| `test_usuarios_endpoints.py` | CRUD de usuários e RBAC (restrito a GESTOR) |
-
-> **Resultado esperado:** `27 passed` ✅
-
----
-
-## ⚙️ Variáveis de Ambiente
-
-Crie um arquivo `.env` na pasta `backend/` com as seguintes variáveis:
-
-```env
-# URL do banco de dados (SQLite local ou PostgreSQL via asyncpg)
-DATABASE_URL=sqlite+aiosqlite:///./lista.db
-
-# Chave secreta para assinar os tokens JWT (alterar em produção!)
-SECRET_KEY=sua-chave-secreta-muito-longa-e-aleatoria
-
-# Algoritmo JWT
-ALGORITHM=HS256
-
-# Expiração do token de acesso (minutos)
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-
-# Expiração do refresh token (dias)
-REFRESH_TOKEN_EXPIRE_DAYS=7
-
-# URL do endpoint de autenticação (ajustar se montado como sub-app)
-TOKEN_URL=/api/auth/login
-```
-
-> **`TOKEN_URL`** permite que a aplicação seja montada em qualquer prefixo de rota em servidores hospitalares existentes sem alterar o código-fonte.
-
----
-
-## 🏥 Deploy como Sub-App em Portal Hospitalar
-
-Se a API for montada como sub-aplicação em um servidor existente (ex: sob `/portal/aciono-voce`), basta definir no `.env`:
-
-```env
-TOKEN_URL=/portal/aciono-voce/api/auth/login
-```
-
-O Swagger UI utilizará automaticamente o caminho correto para autenticação.
+- [ ] `SECRET_KEY` gerado com segurança (`openssl rand -hex 32`) e fora do controle de versão
+- [ ] `RUN_SEEDS=0` (ou senhas padrão alteradas antes de habilitar)
+- [ ] Banco migrado com `alembic upgrade head` (evitar depender de `create_all` em produção)
+- [ ] SSL/TLS ativado (proxy reverso)
+- [ ] CORS restrito a domínios confiáveis (hoje `allow_origins=["*"]` em `app/main.py`)
+- [ ] Backups automáticos do banco de dados
+- [ ] Logs centralizados e monitoramento de health check (`/docs`)
 
 ---
 
@@ -560,9 +420,10 @@ O Swagger UI utilizará automaticamente o caminho correto para autenticação.
 | **UUID gerado no cliente** | Permite criar registros offline sem conflito de PK ao sincronizar |
 | **Soft Delete (`excluido: true`)** | Garante propagação da exclusão para clientes offline que ainda não sincronizaram |
 | **Timestamp UTC em toda a cadeia** | Elimina ambiguidade de fuso horário entre cliente (ISO 8601) e servidor |
-| **Refresh Token com rotação** | Sessão resiliente em ambientes com conectividade intermitente |
+| **Refresh Token com rotação** | Sessão resiliente em ambientes com conectividade intermitente, com defesa contra reuso de token |
 | **bcrypt em thread pool** | Evita bloqueio do event loop assíncrono do FastAPI |
 | **Trilha de Auditoria (AuditTrail)** | Rastreabilidade obrigatória em ambiente hospitalar |
+| **Arquitetura modular (`app/modules/*`)** | Cada domínio (auth, usuarios, contatos, sync, auditoria) é autocontido (models/repository/router/schemas) |
 | **`RUN_SEEDS` via env var** | Impede execução acidental de seeds em testes automatizados |
 
 ---
@@ -571,16 +432,19 @@ O Swagger UI utilizará automaticamente o caminho correto para autenticação.
 
 | Camada | Tecnologia | Versão |
 |---|---|---|
-| Backend | FastAPI | 0.110 |
+| Backend | FastAPI | 0.138 |
 | Backend | SQLAlchemy (async) | 2.0 |
-| Backend | Pydantic | 2.6 |
+| Backend | Pydantic / pydantic-settings | 2.13 / 2.14 |
 | Backend | python-jose | 3.3 |
 | Backend | bcrypt | 4.1 |
-| Frontend | Next.js | 16.2 |
-| Frontend | React | 19 |
-| Frontend | Dexie.js | 4.4 |
+| Backend | Alembic | migrações em `backend/migrations` |
+| Frontend | Next.js | 16.2 (App Router) |
+| Frontend | React | 19.2 |
+| Frontend | Dexie.js / dexie-react-hooks | 4.4 |
 | Frontend | TypeScript | 5 |
+| Frontend | @ducanh2912/next-pwa | 10.2 |
 | Infra | Docker / Docker Compose | — |
+| CI | GitHub Actions (`.github/workflows/ci.yml`) | — |
 
 ---
 
