@@ -46,26 +46,26 @@ lista_telefonica_acionovoce/
 ├── backend/                     # API FastAPI
 │   ├── app/
 │   │   ├── core/
-│   │   │   ├── auth.py          # JWT, OAuth2, require_gestor (RBAC)
+│   │   │   ├── auth.py          # JWT, OAuth2, require_gestor/require_consultor (RBAC)
 │   │   │   ├── config.py        # Settings via pydantic_settings (.env)
-│   │   │   ├── init_db.py       # Criação de tabelas e seed de dados
+│   │   │   ├── init_db.py       # Criação de tabelas e seed de dados (e-mail + senha)
 │   │   │   └── passwords.py     # bcrypt async (thread pool)
 │   │   ├── models/
-│   │   │   └── models.py        # SQLAlchemy ORM: Usuario, Contato, AuditTrail
+│   │   │   └── models.py        # SQLAlchemy ORM: Usuario, RefreshToken, Contato, AuditTrail
 │   │   ├── repositories/
 │   │   │   ├── contatos.py      # ContatoRepository (CRUD + sincronização em lote)
-│   │   │   └── usuario.py       # UsuarioRepository
+│   │   │   └── usuarios.py      # UsuarioRepository + RefreshTokenRepository
 │   │   ├── routers/
-│   │   │   ├── auth.py          # /api/auth/login · /api/auth/refresh
+│   │   │   ├── auth.py          # /api/auth/login · /refresh · /logout
 │   │   │   ├── contatos.py      # /api/contatos/ · /criar-editar · /deletar · /sync
-│   │   │   └── usuarios.py      # /api/usuarios/
+│   │   │   └── usuarios.py      # /api/usuarios/ (CRUD, restrito a GESTOR)
 │   │   ├── schemas/
-│   │   │   ├── auth.py          # LoginRequest, TokenResponse, RefreshRequest
+│   │   │   ├── auth.py          # LoginRequest, TokenResponse, RefreshRequest, LogoutRequest
 │   │   │   ├── contatos.py      # ContatoCreate, ContatoSync, SyncPayload, SyncResponse
-│   │   │   └── usuarios.py      # UsuarioCreate, UsuarioResponse
+│   │   │   └── usuarios.py      # UsuarioCreate, UsuarioUpdate, UsuarioResponse
 │   │   ├── database.py          # Engine, session maker, Base declarativa
 │   │   └── main.py              # FastAPI app, CORS, lifespan, montagem de rotas
-│   ├── tests/                   # Suíte pytest (11 testes, 100% passando)
+│   ├── tests/                   # Suíte pytest (27 testes, 100% passando)
 │   ├── Dockerfile               # Imagem de produção (app.main:app, sem --reload)
 │   └── requirements.txt
 │
@@ -124,11 +124,12 @@ SE (contato já existe no servidor):
 
 ### Camadas de Segurança
 
-- **JWT Access Token:** Rotação automática via refresh endpoint (30 min default)
+- **JWT Access Token:** curta duração (30 min default), renovado via `/api/auth/refresh`
+- **Refresh Token com rotação real:** persistido (hash) em `refresh_tokens`; cada uso invalida o token anterior e reuso revoga todas as sessões
 - **Senha Hash:** bcrypt assíncrono com salt automático
-- **Soft Delete:** Dados nunca desaparecem (apenas `excluido: true`)
-- **Audit Trail:** Cada operação registra `usuario_id_externo`, `acao` e `dados` em JSON imutável
-- **RBAC:** Middlewares verificam `require_gestor` ou `require_consultor`
+- **Soft Delete:** Dados nunca desaparecem (apenas `excluido: true`) — vale tanto para `contatos` quanto para `usuarios`
+- **Audit Trail:** Cada operação registra `usuario_nome` (e-mail de quem executou), `acao`, `tabela`, `registro_id` e `dados_modificados` (JSON) de forma imutável
+- **RBAC:** Dependências `require_gestor` (leitura+escrita) e `require_consultor` (qualquer papel autenticado)
 
 ---
 
@@ -137,8 +138,9 @@ SE (contato já existe no servidor):
 ### Endpoints de Autenticação
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
-| `POST` | `/api/auth/login` | Login com `usuario_id_externo` (SSO) |
-| `POST` | `/api/auth/refresh` | Renova access token com refresh token |
+| `POST` | `/api/auth/login` | Login com e-mail (`login`) + `senha` |
+| `POST` | `/api/auth/refresh` | Rotaciona o par de tokens (revoga o refresh usado) |
+| `POST` | `/api/auth/logout` | Revoga o refresh token da sessão atual |
 
 ### Endpoints de Contatos
 | Método | Endpoint | Perfil | Descrição |
@@ -149,15 +151,16 @@ SE (contato já existe no servidor):
 | `POST` | `/api/contatos/sync` | Consultor+ | Sincronização bidirecional offline |
 
 ### Trilha de Auditoria
-Toda escrita (`criar`, `atualizar`, `deletar`) registra em `audit_trails`:
+Toda escrita (`criar`, `atualizar`, `deletar`, incluindo as originadas por `/sync`) registra em `audit_trail`:
 ```json
 {
-  "id": "<uuid>",
-  "usuario_id_externo": "RI98234",
-  "acao": "atualizar",
+  "id": 42,
+  "usuario_nome": "gestor@hcfmb.unesp.br",
+  "acao": "EDITAR",
   "tabela": "contatos",
   "registro_id": "<contato_uuid>",
-  "dados": { "nome": "Novo Nome", "telefone": "..." },
+  "detalhes": "Contato Novo Nome (...) editado via painel online.",
+  "dados_modificados": "{\"nome\": \"Novo Nome\", \"telefone\": \"...\"}",
   "criado_em": "2026-06-24T15:30:45Z"
 }
 ```
@@ -438,9 +441,14 @@ O sistema implementa dois papéis de usuário, protegidos por JWT com **rotaçã
 ### Endpoints de Autenticação
 
 ```
-POST /api/auth/login    → Retorna access_token + refresh_token
-POST /api/auth/refresh  → Rotaciona tokens (novo par access + refresh)
+POST /api/auth/login    → { login, senha } → access_token + refresh_token + papel + nome
+POST /api/auth/refresh  → Rotaciona tokens (revoga o antigo, emite novo par access + refresh)
+POST /api/auth/logout   → Revoga o refresh token da sessão atual (204)
 ```
+
+A rotação é real: cada `refresh_token` só pode ser usado uma vez. Reapresentá-lo depois de
+já ter sido rotacionado revoga automaticamente todas as sessões do usuário (proteção contra
+token roubado).
 
 ---
 
@@ -495,13 +503,13 @@ cd backend
 
 | Arquivo de Teste | Cobertura |
 |---|---|
-| `test_auth_endpoints.py` | Login e refresh de token |
+| `test_auth_endpoints.py` | Login (sucesso/erro), rotação de refresh, reuso de token revogado, logout |
 | `test_blocking_password_ops.py` | Verificação de bcrypt fora da thread principal |
-| `test_contatos_endpoints.py` | Listagem e sincronização de contatos |
-| `test_schemas.py` | Validação Pydantic (telefone, papel, SecretStr) |
-| `test_usuarios_endpoints.py` | CRUD de usuários e RBAC |
+| `test_contatos_endpoints.py` | Listagem, sincronização e RBAC de escrita (GESTOR vs CONSULTOR) |
+| `test_schemas.py` | Validação Pydantic (telefone, e-mail, papel) |
+| `test_usuarios_endpoints.py` | CRUD de usuários e RBAC (restrito a GESTOR) |
 
-> **Resultado esperado:** `11 passed` ✅
+> **Resultado esperado:** `27 passed` ✅
 
 ---
 

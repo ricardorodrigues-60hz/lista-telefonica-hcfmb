@@ -96,7 +96,7 @@ graph TD
     B -->|Aplicação Continua| C[UI Reativa<br/>useLiveQuery]
     D[Retorna Online] --> E[window.online event]
     E -->|dispara| F["triggerSync()"]
-    F -->|POST /api/contatos/sync| G["Backend<br/>Compara timestamps"]
+    F -->|POST /api/sync| G["Backend<br/>Compara timestamps"]
     G -->|last-write-wins| H["Retorna delta"]
     H -->|Atualiza| I["Dexie.js<br/>sincronizado=true"]
     I -->|UI avisa sucesso| J[Status: Sincronizado]

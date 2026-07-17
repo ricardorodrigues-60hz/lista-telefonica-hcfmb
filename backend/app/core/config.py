@@ -10,8 +10,12 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     TOKEN_URL: str = "/api/auth/login"
 
-    # Configura o Pydantic para ler um arquivo chamado '.env' na raiz do backend
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    # Configura o Pydantic para ler um arquivo chamado '.env' na raiz do backend.
+    # extra="ignore" evita que variáveis de ambiente não mapeadas (ex.: API_PORT,
+    # API_BASE, usadas apenas por scripts/documentação) quebrem a inicialização.
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
 # Instancia global para ser importada no resto do sistema
 settings = Settings()

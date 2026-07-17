@@ -1,10 +1,19 @@
 from datetime import datetime, timezone
-import asyncio
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import engine, Base, async_session_maker
-from app.models.models import Usuario, Contato
+from app.core.database import engine, Base, async_session_maker
+from app.modules.usuarios.models import Usuario
+from app.modules.contatos.models import Contato
+from app.core.security import async_get_password_hash
+
+# Contas padrão de demonstração/desenvolvimento.
+# ATENÇÃO: altere (ou desative via RUN_SEEDS=0) essas senhas antes de qualquer deploy em produção.
+CONTAS_SEED = [
+    {"nome": "Gestor HCFMB", "email": "gestor@hcfmb.unesp.br", "senha": "gestor123", "papel": "GESTOR"},
+    {"nome": "Consultor HCFMB", "email": "consultor@hcfmb.unesp.br", "senha": "consultor123", "papel": "CONSULTOR"},
+]
+
 
 async def inicializar_banco():
     # Cria as tabelas no database(PostgreSQL) se não existirem
@@ -17,16 +26,20 @@ async def inicializar_banco():
         await seed_usuarios(db)
         await seed_contatos(db)
         await db.commit()
+
+
 async def seed_usuarios(db: AsyncSession):
-    gestor_id = "admin123"
-    
-    res_g = await db.execute(select(Usuario).filter(Usuario.usuario_id_externo == gestor_id))
-    if not res_g.scalars().first():
-        gestor = Usuario(
-            usuario_id_externo=gestor_id,
-            papel="GESTOR",
-        )
-        db.add(gestor)
+    for conta in CONTAS_SEED:
+        res = await db.execute(select(Usuario).where(Usuario.email == conta["email"]))
+        if not res.scalars().first():
+            usuario = Usuario(
+                nome=conta["nome"],
+                email=conta["email"],
+                senha_hash=await async_get_password_hash(conta["senha"]),
+                papel=conta["papel"],
+            )
+            db.add(usuario)
+
 
 async def seed_contatos(db: AsyncSession):
     # Verifica se a tabela de contatos está vazia

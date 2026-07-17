@@ -1,9 +1,9 @@
 from uuid import uuid4
 from pydantic import ValidationError
 
-from app.schemas.contatos import ContatoCreate
-from app.schemas.auth import LoginRequest
-from app.schemas.usuarios import UsuarioCreate
+from app.modules.contatos.schemas import ContatoCreate
+from app.modules.auth.schemas import LoginRequest
+from app.modules.usuarios.schemas import UsuarioCreate
 
 
 def test_contato_create_valid():
@@ -20,13 +20,27 @@ def test_contato_invalid_phone():
 
 
 def test_login_request_valid():
-    lr = LoginRequest(usuario_id_externo="gestor-123")
-    assert lr.usuario_id_externo == "gestor-123"
+    lr = LoginRequest(login="gestor@hcfmb.unesp.br", senha="gestor123")
+    assert lr.login == "gestor@hcfmb.unesp.br"
+    assert lr.senha == "gestor123"
+
+
+def test_login_request_email_invalido():
+    try:
+        LoginRequest(login="nao-e-um-email", senha="gestor123")
+        assert False, "E-mail inválido deveria gerar ValidationError"
+    except ValidationError:
+        assert True
+
+
+def test_usuario_create_valid():
+    u = UsuarioCreate(nome="Novo Usuário", email="novo@hcfmb.unesp.br", senha="senha123", papel="CONSULTOR")
+    assert u.papel == "CONSULTOR"
 
 
 def test_usuario_create_papel_validation():
     try:
-        UsuarioCreate(usuario_id_externo="some-id", papel="ADMIN")
+        UsuarioCreate(nome="Alguém", email="alguem@hcfmb.unesp.br", senha="senha123", papel="ADMIN")
         assert False, "Papel inválido deveria causar ValidationError"
     except ValidationError:
         assert True

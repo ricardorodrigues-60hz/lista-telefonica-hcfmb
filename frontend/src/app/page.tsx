@@ -239,7 +239,21 @@ export default function Home() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Revoga a sessão no servidor (rotação de refresh token).
+    // Best-effort: se o dispositivo estiver offline, apenas seguimos com a limpeza local.
+    if (refreshToken) {
+      try {
+        await fetch(`${API_BASE}/auth/logout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshToken })
+        });
+      } catch (err) {
+        // Sem conexão ou servidor indisponível: a sessão local é encerrada mesmo assim.
+      }
+    }
+
     setToken(null);
     setRefreshToken(null);
     setUserRole(null);

@@ -1,14 +1,16 @@
+import logging
+import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-import os
-import logging
 
-from app.routers import api_router
+from app.api import api_router
+from app.core.exceptions import register_exception_handlers
+from app.core.logging import configure_logging
 
+configure_logging()
 
-# from sqlalchemy.orm import Session
-# from typing import List
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,12 +28,15 @@ async def lifespan(app: FastAPI):
 
     yield  # Continua com a execução da aplicação
 
+
 app = FastAPI(title="Aciono Você API", version="1.0.0", lifespan=lifespan)
+
+register_exception_handlers(app)
 
 # CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Em produ~ção, você deve especificar os domínios permitidos para maior segurança
+    allow_origins=["*"],  # Em produção, você deve especificar os domínios permitidos para maior segurança
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

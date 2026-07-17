@@ -18,131 +18,155 @@ Este módulo constitui o backend do sistema **Aciono Você**, projetado especifi
 
 ## 🏛️ Arquitetura do Sistema
 
-A aplicação adota **Clean Architecture** com separação clara de responsabilidades:
+A aplicação adota **organização por módulos de domínio** (auth, usuarios, contatos, sync, auditoria), cada um com suas próprias camadas internas, mais um `core/` com as preocupações transversais (config, banco, segurança, exceções, logging):
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│                    FastAPI Application                         │
-│                    (app/main.py)                               │
-└────────────────────┬───────────────────────────────────────────┘
-                     │
-  ┌──────────────────┼──────────────────┐
-  │                  │                  │
-  v                  v                  v
-Routers          Schemas           Core (Auth/Config)
-(EntryPoints)    (Pydantic v2)      (JWT, RBAC, Passwords)
-  │                  │                  │
-  └──────────────────┼──────────────────┘
-                     │
-                     v
-            Repository Pattern
-        (ContatoRepository, UsuarioRepository)
-                     │
-                     v
-            SQLAlchemy ORM (Async)
-         (Models: Usuario, Contato, AuditTrail)
-                     │
-                     v
-        ┌─────────────────────────────┐
-        │   PostgreSQL Database       │
-        │  (async via asyncpg)        │
-        └─────────────────────────────┘
+app/
+├── main.py                 # bootstrap do FastAPI, CORS, exception handlers
+├── api.py                  # agrega o router de cada módulo em /api
+├── core/
+│   ├── config.py           # Settings (Pydantic Settings)
+│   ├── database.py         # engine/Session assíncronos, Base declarativa
+│   ├── security.py         # primitivas de JWT e hashing de senha (bcrypt)
+│   ├── exceptions.py        # exceções de domínio + handlers HTTP
+│   ├── logging.py          # configuração centralizada de logging
+│   └── init_db.py          # seed de dados de desenvolvimento
+└── modules/
+    ├── auth/                # models(RefreshToken), schemas, repository, service (login/refresh/RBAC), router
+    ├── usuarios/            # models(Usuario), schemas, repository, router (CRUD simples, sem service)
+    ├── contatos/            # models(Contato), schemas, repository, router (CRUD simples, sem service)
+    ├── sync/                # schemas, service (resolução de conflitos last-write-wins), router
+    └── auditoria/           # models(AuditTrail), repository, schemas (usado pelos demais módulos)
 ```
+
+Fluxo de uma requisição: **Router (HTTP)** → **Service** (quando há lógica não-trivial: auth, sync) → **Repository** (persistência/SQLAlchemy) → **Models** (ORM) → **PostgreSQL** (async via `asyncpg`).
 
 ### Benefícios da Arquitetura
 
-1. **Separação de Responsabilidades:** Routers (HTTP) → Repositories (Dados) → Models (ORM)
-2. **Testabilidade:** Repositories podem ser mockados; testes usam banco em memória (SQLite)
-3. **Escalabilidade:** Operações async/await maximizam concorrência
-4. **Auditoria:** Toda escrita passa por `AuditTrail` imutável
-5. **Segurança:** RBAC via middlewares `require_gestor` e `require_consultor`
+1. **Alta coesão / baixo acoplamento:** cada módulo agrupa tudo que muda junto (schemas, models, repository, router do mesmo domínio).
+2. **Testabilidade:** Repositories e Services podem ser mockados; testes usam banco em memória (SQLite).
+3. **Escalabilidade:** novos domínios entram como novos módulos, sem inflar pastas técnicas compartilhadas.
+4. **Auditoria:** toda escrita relevante passa pelo `AuditoriaRepository`, centralizando a trilha imutável.
+5. **Segurança:** RBAC via dependências `require_gestor` e `require_consultor` (módulo `auth`).
 
 ---
 
 ## 🔧 Componentes Principais
 
-### 1. **Routers** (`routers/`)
-Definem os endpoints HTTP e validam entrada/saída via Pydantic schemas:
+### 1. **Routers** (`modules/*/router.py`)
+Definem os endpoints HTTP e validam entrada/saída via Pydantic schemas. Nunca acessam o banco diretamente:
 
-- **`auth.py`:** Login, refresh token, validação JWT
-- **`contatos.py`:** CRUD sync + endpoint `/sync` para offline-first
-- **`usuarios.py`:** Gerenciamento de usuários corporativos
+- **`auth/router.py`:** Login (e-mail + senha), refresh com rotação, logout
+- **`usuarios/router.py`:** Gerenciamento de usuários (CRUD, restrito a GESTOR)
+- **`contatos/router.py`:** CRUD de contatos (leitura para CONSULTOR/GESTOR, escrita restrita a GESTOR)
+- **`sync/router.py`:** Endpoint `POST /api/sync` de sincronização offline-first
 
-### 2. **Repositories** (`repositories/`)
-Encapsulam lógica de acesso a dados:
+### 2. **Services** (`modules/*/service.py`)
+Usados apenas onde há lógica não-trivial (login/RBAC e resolução de conflitos):
 
-- **`ContatoRepository`:** Queries complexas (sincronização, soft delete, paginação)
-- **`UsuarioRepository`:** Busca por `usuario_id_externo`, validação de credenciais
+- **`auth/service.py` (`AuthService`):** autentica, emite/rotaciona tokens, logout; expõe `get_current_user`, `require_gestor`, `require_consultor`
+- **`sync/service.py` (`SyncService`):** decide, por contato, se a versão offline vence o registro do servidor (last-write-wins)
 
-### 3. **Models** (`models/models.py`)
-Definem tabelas SQLAlchemy com relacionamentos:
+### 3. **Repositories** (`modules/*/repository.py`)
+Encapsulam lógica de acesso a dados (CRUD, joins, persistência), sem regra de negócio:
+
+- **`contatos/repository.py` (`ContatoRepository`):** CRUD + soft delete + métodos de persistência usados pelo `SyncService`
+- **`usuarios/repository.py` (`UsuarioRepository`):** busca por e-mail, hashing de senha (bcrypt), CRUD de usuários
+- **`auth/repository.py` (`RefreshTokenRepository`):** persistência de sessões (hash SHA-256 do token), rotação e revogação
+- **`auditoria/repository.py` (`AuditoriaRepository`):** ponto único de escrita da trilha de auditoria, usado pelos demais repositories
+
+### 4. **Models** (`modules/*/models.py`)
+Definem tabelas SQLAlchemy, uma por módulo de domínio:
 
 ```python
 class Usuario(Base):
-    """Usuário corporativo com permissões RBAC"""
+    """Usuário autenticado por e-mail + senha, com papel RBAC"""
     __tablename__ = "usuarios"
-    id: Mapped[UUID] = mapped_column(primary_key=True)
-    usuario_id_externo: Mapped[str] = mapped_column(unique=True)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_novo_uuid)
+    nome: Mapped[str]
+    email: Mapped[str] = mapped_column(unique=True, index=True)
     senha_hash: Mapped[str]
-    papel: Mapped[Papel] = mapped_column(default=Papel.consultor)
-    contatos: Mapped[list["Contato"]] = relationship(back_populates="criado_por")
+    papel: Mapped[str]  # "GESTOR" ou "CONSULTOR"
+    criado_em: Mapped[datetime] = mapped_column(server_default=func.now())
+    atualizado_em: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+    excluido: Mapped[bool] = mapped_column(default=False)
+
+class RefreshToken(Base):
+    """Sessão de refresh token (hash), habilitando rotação e revogação real"""
+    __tablename__ = "refresh_tokens"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_novo_uuid)
+    usuario_id: Mapped[str] = mapped_column(ForeignKey("usuarios.id"))
+    token_hash: Mapped[str] = mapped_column(unique=True, index=True)
+    expira_em: Mapped[datetime]
+    revogado: Mapped[bool] = mapped_column(default=False)
+    substituido_por_id: Mapped[Optional[str]]  # aponta para o token que o substituiu na rotação
 
 class Contato(Base):
     """Contato ou ramal hospitalar"""
     __tablename__ = "contatos"
-    id: Mapped[UUID] = mapped_column(primary_key=True)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)  # UUID gerado no cliente
     nome: Mapped[str]
     telefone: Mapped[str]
-    email: Mapped[Optional[EmailStr]]
-    tipo_numero: Mapped[TipoNumero]
-    atualizado_em: Mapped[datetime] = mapped_column(default_factory=utcnow)
+    email: Mapped[Optional[str]]
+    tipo_numero: Mapped[str]  # "institucional" ou "publico"
+    criado_em: Mapped[datetime] = mapped_column(server_default=func.now())
+    atualizado_em: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
     excluido: Mapped[bool] = mapped_column(default=False)
-    criado_em: Mapped[datetime] = mapped_column(default_factory=utcnow)
-    criado_por_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
 
 class AuditTrail(Base):
-    """Trilha imutável de todas as operações de escrita"""
-    __tablename__ = "audit_trails"
-    id: Mapped[UUID] = mapped_column(primary_key=True)
-    usuario_id_externo: Mapped[str]
-    acao: Mapped[str]  # 'criar', 'atualizar', 'deletar'
-    tabela: Mapped[str]
-    registro_id: Mapped[UUID]
-    dados: Mapped[dict] = mapped_column(JSON)
-    criado_em: Mapped[datetime] = mapped_column(default_factory=utcnow)
+    """Trilha imutável de todas as operações de escrita (contatos e usuários)"""
+    __tablename__ = "audit_trail"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    usuario_nome: Mapped[str]  # e-mail de quem executou a ação
+    acao: Mapped[str]  # "CRIAR", "EDITAR", "EXCLUIR", "CRIAR_SYNC"...
+    tabela: Mapped[str]  # "contatos" ou "usuarios"
+    registro_id: Mapped[Optional[str]]
+    detalhes: Mapped[str]
+    dados_modificados: Mapped[Optional[str]]  # JSON serializado com o diff
+    criado_em: Mapped[datetime] = mapped_column(server_default=func.now())
 ```
 
-### 4. **Schemas** (`schemas/`)
-Validação com Pydantic v2:
+### 5. **Schemas** (`modules/*/schemas.py`)
+Validação com Pydantic v2, um arquivo por módulo:
 
 ```python
-class ContatoCreate(BaseModel):
-    """Entrada para criar/atualizar contato"""
-    id: UUID = Field(default_factory=uuid4)  # Gerado pelo cliente
-    nome: str = Field(..., min_length=3, max_length=255)
-    telefone: str = Field(..., pattern=r"^\d{8,}$")  # Min 8 dígitos
+# modules/contatos/schemas.py
+class ContatoCreate(ContatoBase):
+    """Entrada para criar/atualizar contato via painel"""
+    id: UUID  # Gerado pelo cliente
+
+# modules/sync/schemas.py
+class ContatoSync(BaseModel):
+    """Item individual do lote de sincronização offline"""
+    id: UUID
+    nome: str
+    telefone: str
     email: Optional[EmailStr] = None
     tipo_numero: TipoNumero
-    atualizado_em: datetime  # UTC, recebido do cliente
+    atualizado_em: datetime  # normalizado para UTC
+    excluido: bool = False
 
 class SyncPayload(BaseModel):
-    """Payload de sincronização bidirecional"""
-    contatos: list[dict]  # [{ id, atualizado_em, excluido }, ...]
+    contatos: list[ContatoSync]
+    ultima_sincronizacao: Optional[datetime] = None
 
 class SyncResponse(BaseModel):
-    """Resposta com delta do servidor"""
-    contatos_criados: list[ContatoResponse]
-    contatos_atualizados: list[ContatoResponse]
-    contatos_deletados: list[UUID]
+    sucesso: bool
+    contatos_atualizados: list[UUID]
+    error: Optional[list[str]] = None
 ```
 
-### 5. **Core** (`core/`)
-Sistema de autenticação, configuração e utilitários:
+### 6. **Core** (`core/`)
+Preocupações transversais, sem conhecimento de nenhum domínio específico:
 
-- **`auth.py`:** JWT, OAuth2PasswordBearer, middlewares RBAC
+- **`security.py`:** JWT (access/refresh) e hashing de senha (bcrypt com thread pool)
 - **`config.py`:** Variáveis de ambiente via Pydantic Settings
-- **`passwords.py`:** Hash/verify assíncrono (bcrypt com thread pool)
-- **`init_db.py`:** Seed de dados de teste
+- **`database.py`:** engine/Session assíncronos e `Base` declarativa
+- **`exceptions.py`:** exceções de domínio (`CredenciaisInvalidasError`, `TokenInvalidoError`, etc.) e handlers HTTP
+- **`logging.py`:** configuração centralizada de logging
+- **`init_db.py`:** seed de dados de desenvolvimento
+
+Regras de RBAC (`get_current_user`, `require_gestor`, `require_consultor`) vivem em `modules/auth/service.py`, pois dependem do modelo `Usuario` — mantendo `core/` livre de acoplamento com módulos de domínio.
 
 ---
 
@@ -153,7 +177,7 @@ Sistema de autenticação, configuração e utilitários:
 ```mermaid
 graph LR
     A[Cliente] -->|POST /api/auth/login| B[Endpoint Login]
-    B -->|Valida usuario_id_externo + senha| C{Credenciais OK?}
+    B -->|Valida e-mail + senha bcrypt| C{Credenciais OK?}
     C -->|Sim| D["JWT: Access (30min) + Refresh (7d)"]
     C -->|Não| E[401 Unauthorized]
     D -->|Retorna ao cliente| A
@@ -162,6 +186,8 @@ graph LR
     G -->|Sim| H[Executa endpoint]
     G -->|Não| I[401 ou 403]
 ```
+
+O refresh token é persistido (via hash) em `refresh_tokens`. Cada uso em `POST /api/auth/refresh` **rotaciona** a sessão: o token antigo é revogado e um novo par é emitido. Reapresentar um token já rotacionado revoga automaticamente todas as sessões do usuário (indica possível token roubado). `POST /api/auth/logout` revoga o refresh token da sessão atual.
 
 ### Middleware de RBAC
 
@@ -180,10 +206,10 @@ async def listar_contatos(...):
 
 **Escopo de Papéis:**
 
-| Papel | Leitura | Escrita | Sincronização |
-|-------|---------|---------|---------------|
-| `consultor` | ✅ | ❌ | ✅ |
-| `gestor` | ✅ | ✅ | ✅ |
+| Papel | Leitura | Escrita de contatos | Sincronização | Gestão de usuários |
+|-------|---------|----------------------|----------------|---------------------|
+| `CONSULTOR` | ✅ | ❌ | ✅ | ❌ |
+| `GESTOR` | ✅ | ✅ | ✅ | ✅ |
 
 ---
 
@@ -195,7 +221,7 @@ async def listar_contatos(...):
 ```bash
 curl -X POST http://localhost:8085/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"usuario_id_externo": "RI98234", "senha": "senha123"}'
+  -d '{"login": "gestor@hcfmb.unesp.br", "senha": "gestor123"}'
 ```
 
 **Response (200):**
@@ -203,16 +229,39 @@ curl -X POST http://localhost:8085/api/auth/login \
 {
   "access_token": "eyJhbGc...",
   "refresh_token": "eyJhbGc...",
-  "token_type": "bearer"
+  "token_type": "bearer",
+  "papel": "GESTOR",
+  "nome": "Gestor HCFMB"
 }
 ```
 
 #### `POST /api/auth/refresh`
-Renova o access token usando refresh token:
+Rotaciona o par de tokens (o refresh token usado é revogado e substituído):
 ```bash
 curl -X POST http://localhost:8085/api/auth/refresh \
   -H "Content-Type: application/json" \
   -d '{"refresh_token": "eyJhbGc..."}'
+```
+Resposta (200): mesmo formato do login, com um novo `access_token` e `refresh_token`.
+Se o `refresh_token` apresentado já tiver sido rotacionado/revogado, retorna **401**.
+
+#### `POST /api/auth/logout`
+```bash
+curl -X POST http://localhost:8085/api/auth/logout \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token": "eyJhbGc..."}'
+```
+Revoga a sessão (refresh token) atual. Resposta: **204 No Content**.
+
+### Usuários (Requer GESTOR, exceto `/me`)
+
+```
+GET    /api/usuarios/me         → Perfil do usuário autenticado (qualquer papel)
+GET    /api/usuarios/           → Lista usuários ativos
+GET    /api/usuarios/{id}       → Obtém um usuário por ID
+POST   /api/usuarios/           → Cria usuário (nome, email, senha, papel)
+PUT    /api/usuarios/{id}       → Atualiza nome/papel/senha
+DELETE /api/usuarios/{id}       → Soft delete (não permite autoexclusão)
 ```
 
 ### Contatos
@@ -264,55 +313,46 @@ curl -X DELETE http://localhost:8085/api/contatos/deletar/550e8400-e29b-41d4-a71
 
 Marca contato como `excluido: true` (soft delete).
 
-#### `POST /api/contatos/sync` (Sincronização Offline)
-Endpoint crítico para a estratégia offline-first:
+### Sincronização (módulo `sync`)
+
+#### `POST /api/sync` (Sincronização Offline)
+Endpoint crítico para a estratégia offline-first. Implementado no módulo `sync` (não em `contatos`), pois envolve resolução de conflito — responsabilidade do `SyncService`:
 
 ```bash
-curl -X POST http://localhost:8085/api/contatos/sync \
+curl -X POST http://localhost:8085/api/sync \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
     "contatos": [
       {
         "id": "550e8400-e29b-41d4-a716-446655440000",
+        "nome": "Ramal Recepção",
+        "telefone": "2137",
+        "email": "recep@hcfmb.br",
+        "tipo_numero": "institucional",
         "atualizado_em": "2026-06-24T15:35:00Z",
         "excluido": false
-      },
-      {
-        "id": "550e8400-e29b-41d4-a716-446655440001",
-        "atualizado_em": "2026-06-24T14:20:00Z",
-        "excluido": true
       }
     ]
   }'
 ```
 
-**Response (200) — Delta do Servidor:**
+**Response (200):**
 ```json
 {
-  "contatos_criados": [
-    {
-      "id": "550e8400-e29b-41d4-a716-446655440002",
-      "nome": "Novo Contato (criado por outro usuário)",
-      "telefone": "2139",
-      "atualizado_em": "2026-06-24T16:00:00Z"
-    }
-  ],
-  "contatos_atualizados": [
-    {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "nome": "Versão atualizada do servidor",
-      "atualizado_em": "2026-06-24T15:45:00Z"
-    }
-  ],
-  "contatos_deletados": ["550e8400-e29b-41d4-a716-446655440001"]
+  "sucesso": true,
+  "contatos_atualizados": ["550e8400-e29b-41d4-a716-446655440000"],
+  "error": null
 }
 ```
 
-**Regra de Sincronização:**
-- Se `cliente.atualizado_em > servidor.atualizado_em` → Aceita alteração do cliente
-- Caso contrário → Envia versão atualizada do servidor de volta
-- Sempre retorna criações/alterações de outros usuários desde última sincronização
+**Regra de Sincronização (last-write-wins, em `SyncService.sincronizar`):**
+- Se o contato não existe no servidor → cria com o `id` e timestamp vindos do cliente
+- Se existe e `cliente.atualizado_em > servidor.atualizado_em` → aceita a alteração do cliente (inclusive `excluido`)
+- Se existe e a alteração do cliente for mais antiga → descarta silenciosamente (o servidor mantém a versão mais recente)
+- Cada item processado é auditado (`CRIAR_SYNC`, `EDITAR_SYNC` ou `EXCLUIR_SYNC`) via `AuditoriaRepository`
+
+> ⚠️ Este endpoint mudou de `POST /api/contatos/sync` para `POST /api/sync` na reorganização em módulos — o que, na verdade, corrige uma inconsistência pré-existente com o frontend, que já chamava `POST /api/sync`.
 
 ---
 
@@ -325,11 +365,11 @@ class TipoNumero(str, Enum):
     publico = "publico"              # Número público
 ```
 
-### Enum `Papel`
+### Papel do usuário
 ```python
-class Papel(str, Enum):
-    consultor = "consultor"  # Apenas leitura + sync
-    gestor = "gestor"        # Leitura + escrita + auditoria
+PapelUsuario = Literal["GESTOR", "CONSULTOR"]
+# CONSULTOR: apenas leitura + sync
+# GESTOR:    leitura + escrita de contatos + gestão de usuários
 ```
 
 ---
@@ -492,13 +532,15 @@ pytest --cov=app tests/ --cov-report=html
 
 ### Testes Disponíveis
 
-| Arquivo | Testes | Cobertura |
-|---------|--------|-----------|
-| `test_auth_endpoints.py` | Login, refresh token, erros | Autenticação 100% |
-| `test_contatos_endpoints.py` | CRUD, paginação, filtros | Contatos 100% |
-| `test_blocking_password_ops.py` | Hash assíncrono, BCrypt | Segurança 100% |
-| `test_schemas.py` | Validação Pydantic | Schemas 100% |
-| `test_usuarios_endpoints.py` | RBAC, permissões | Autorização 100% |
+| Arquivo | Testes |
+|---------|--------|
+| `test_auth_endpoints.py` | Login (sucesso/erro), rotação de refresh, reuso de token revogado, logout |
+| `test_contatos_endpoints.py` | Listagem, sync e RBAC de escrita (GESTOR vs CONSULTOR) |
+| `test_blocking_password_ops.py` | Hash/verificação bcrypt fora da thread principal |
+| `test_schemas.py` | Validação Pydantic (telefone, e-mail, papel) |
+| `test_usuarios_endpoints.py` | CRUD de usuários e RBAC (GESTOR only) |
+
+> **Resultado esperado:** `27 passed` ✅
 
 ### Exemplo: Teste de Sincronização
 
@@ -510,8 +552,8 @@ async def test_sync_conflito_timestamp():
     
     # 1. Login como gestor
     response = client.post("/api/auth/login", json={
-        "usuario_id_externo": "RI98234",
-        "senha": "senha123"
+        "login": "gestor@hcfmb.unesp.br",
+        "senha": "gestor123"
     })
     token = response.json()["access_token"]
     
