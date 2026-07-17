@@ -1,92 +1,187 @@
 import pytest
+from datetime import datetime, timezone
 from httpx import AsyncClient
 from httpx import ASGITransport
 
 from app.main import app
+from app.modules.auth.service import get_current_user
 
 
-class DummyUser:
-    def __init__(self, usuario_id_externo="gestor-1", papel="GESTOR"):
-        self.usuario_id_externo = usuario_id_externo
+class DummyUsuario:
+    def __init__(self, id="gestor-1", email="gestor@hcfmb.unesp.br", papel="GESTOR", nome="Gestor", excluido=False):
+        self.id = id
+        self.email = email
         self.papel = papel
+        self.nome = nome
+        self.excluido = excluido
+        self.criado_em = datetime.now(timezone.utc)
+        self.atualizado_em = datetime.now(timezone.utc)
 
 
-class FakeRepo:
+class FakeUsuarioRepo:
     def __init__(self):
-        self._users = []
+        self._usuarios: list[DummyUsuario] = []
 
-    async def listar(self):
-        return self._users
+    async def listar_ativos(self):
+        return [u for u in self._usuarios if not u.excluido]
 
-    async def buscar_por_id_externo(self, usuario_id_externo: str):
-        for u in self._users:
-            if u.usuario_id_externo == usuario_id_externo:
+    async def buscar_por_id(self, usuario_id: str):
+        for u in self._usuarios:
+            if u.id == usuario_id:
                 return u
         return None
 
+    async def buscar_por_email(self, email: str):
+        for u in self._usuarios:
+            if u.email == email:
+                return u
+        return None
 
-@pytest.mark.asyncio
-async def test_listar_usuarios_as_gestor(monkeypatch):
-    fake = FakeRepo()
-    fake._users = [
-        DummyUser(usuario_id_externo="gestor-1", papel="GESTOR"),
-        DummyUser(usuario_id_externo="consultor-2", papel="CONSULTOR")
-    ]
+    async def criar(self, *, nome, email, senha, papel, autor):
+        novo = DummyUsuario(id=f"user-{len(self._usuarios) + 1}", email=email, papel=papel, nome=nome)
+        self._usuarios.append(novo)
+        return novo
 
-    # Override dependencies
-    from app.core.auth import get_current_user
+    async def atualizar(self, usuario, *, autor, nome=None, papel=None, senha=None):
+        if nome is not None:
+            usuario.nome = nome
+        if papel is not None:
+            usuario.papel = papel
+        return usuario
+
+    async def deletar_soft(self, usuario, *, autor):
+        usuario.excluido = True
+
+
+def _override_usuario_atual(monkeypatch, fake_repo, usuario_atual):
+    import app.modules.usuarios.router as usuarios_mod
 
     app.dependency_overrides.clear()
-    app.dependency_overrides[get_current_user] = lambda: DummyUser()
+    app.dependency_overrides[get_current_user] = lambda: usuario_atual
+    monkeypatch.setattr(usuarios_mod, "UsuarioRepository", lambda db: fake_repo)
 
-    # Monkeypatch repository used in router
-    import app.routers.usuarios as usuarios_mod
-    monkeypatch.setattr(usuarios_mod, "UsuarioRepository", lambda db: fake)
+
+@pytest.mark.asyncio
+async def test_listar_usuarios_como_gestor(monkeypatch):
+    fake = FakeUsuarioRepo()
+    fake._usuarios = [
+        DummyUsuario(id="gestor-1", email="gestor@hcfmb.unesp.br", papel="GESTOR"),
+        DummyUsuario(id="consultor-2", email="consultor@hcfmb.unesp.br", papel="CONSULTOR"),
+    ]
+    _override_usuario_atual(monkeypatch, fake, DummyUsuario())
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         r = await ac.get("/api/usuarios/")
+
     assert r.status_code == 200
     data = r.json()
-    assert isinstance(data, list)
     assert len(data) == 2
-    assert data[0]["usuario_id_externo"] == "gestor-1"
-    assert data[1]["usuario_id_externo"] == "consultor-2"
+    assert data[0]["email"] == "gestor@hcfmb.unesp.br"
 
 
 @pytest.mark.asyncio
-async def test_get_usuario_by_id_externo(monkeypatch):
-    fake = FakeRepo()
-    user = DummyUser(usuario_id_externo="consultor-2", papel="CONSULTOR")
-    fake._users = [user]
+async def test_listar_usuarios_negado_para_consultor(monkeypatch):
+    fake = FakeUsuarioRepo()
+    consultor = DummyUsuario(id="consultor-2", email="consultor@hcfmb.unesp.br", papel="CONSULTOR")
+    _override_usuario_atual(monkeypatch, fake, consultor)
 
-    from app.core.auth import get_current_user
-    app.dependency_overrides.clear()
-    app.dependency_overrides[get_current_user] = lambda: DummyUser(usuario_id_externo="gestor-1", papel="GESTOR")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        r = await ac.get("/api/usuarios/")
 
-    import app.routers.usuarios as usuarios_mod
-    monkeypatch.setattr(usuarios_mod, "UsuarioRepository", lambda db: fake)
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_obter_usuario_por_id(monkeypatch):
+    fake = FakeUsuarioRepo()
+    fake._usuarios = [DummyUsuario(id="consultor-2", email="consultor@hcfmb.unesp.br", papel="CONSULTOR")]
+    _override_usuario_atual(monkeypatch, fake, DummyUsuario())
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         r = await ac.get("/api/usuarios/consultor-2")
 
     assert r.status_code == 200
     data = r.json()
-    assert data["usuario_id_externo"] == "consultor-2"
+    assert data["email"] == "consultor@hcfmb.unesp.br"
     assert data["papel"] == "CONSULTOR"
 
 
 @pytest.mark.asyncio
-async def test_get_usuario_not_found(monkeypatch):
-    fake = FakeRepo()
-
-    from app.core.auth import get_current_user
-    app.dependency_overrides.clear()
-    app.dependency_overrides[get_current_user] = lambda: DummyUser()
-
-    import app.routers.usuarios as usuarios_mod
-    monkeypatch.setattr(usuarios_mod, "UsuarioRepository", lambda db: fake)
+async def test_obter_usuario_nao_encontrado(monkeypatch):
+    fake = FakeUsuarioRepo()
+    _override_usuario_atual(monkeypatch, fake, DummyUsuario())
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        r = await ac.get("/api/usuarios/non-existent")
+        r = await ac.get("/api/usuarios/nao-existe")
 
     assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_criar_usuario_como_gestor(monkeypatch):
+    fake = FakeUsuarioRepo()
+    _override_usuario_atual(monkeypatch, fake, DummyUsuario())
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        r = await ac.post(
+            "/api/usuarios/",
+            json={
+                "nome": "Novo Consultor",
+                "email": "novo@hcfmb.unesp.br",
+                "senha": "senha123",
+                "papel": "CONSULTOR",
+            },
+        )
+
+    assert r.status_code == 201
+    data = r.json()
+    assert data["email"] == "novo@hcfmb.unesp.br"
+    assert data["papel"] == "CONSULTOR"
+
+
+@pytest.mark.asyncio
+async def test_criar_usuario_email_duplicado(monkeypatch):
+    fake = FakeUsuarioRepo()
+    fake._usuarios = [DummyUsuario(email="duplicado@hcfmb.unesp.br")]
+    _override_usuario_atual(monkeypatch, fake, DummyUsuario())
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        r = await ac.post(
+            "/api/usuarios/",
+            json={
+                "nome": "Outro",
+                "email": "duplicado@hcfmb.unesp.br",
+                "senha": "senha123",
+                "papel": "CONSULTOR",
+            },
+        )
+
+    assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_excluir_usuario_nao_pode_ser_o_proprio(monkeypatch):
+    fake = FakeUsuarioRepo()
+    gestor = DummyUsuario(id="gestor-1")
+    fake._usuarios = [gestor]
+    _override_usuario_atual(monkeypatch, fake, gestor)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        r = await ac.delete("/api/usuarios/gestor-1")
+
+    assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_excluir_usuario_com_sucesso(monkeypatch):
+    fake = FakeUsuarioRepo()
+    gestor = DummyUsuario(id="gestor-1")
+    outro = DummyUsuario(id="consultor-2", email="consultor@hcfmb.unesp.br", papel="CONSULTOR")
+    fake._usuarios = [gestor, outro]
+    _override_usuario_atual(monkeypatch, fake, gestor)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        r = await ac.delete("/api/usuarios/consultor-2")
+
+    assert r.status_code == 204
+    assert outro.excluido is True

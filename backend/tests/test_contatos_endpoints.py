@@ -27,31 +27,25 @@ class FakeRepo:
     async def listar_ativos(self):
         return [FakeContato(nome="A"), FakeContato(nome="B")]
 
-    async def sincronizar_lote_offline(self, contatos, usuario_nome):
-        # pretend we updated the first contact
-        ids = []
-        for c in contatos:
-            try:
-                # pydantic model: has attribute `id`
-                ids.append(str(c.id))
-            except Exception:
-                # dict-like
-                if isinstance(c, dict) and c.get("id"):
-                    ids.append(str(c.get("id")))
-        return ids
+    async def salvar_ou_atualizar(self, contato_in, usuario_email):
+        return FakeContato(id=contato_in.id, nome=contato_in.nome)
+
+    async def deletar_soft(self, contato_id, usuario_email):
+        return True
 
 
 @pytest.mark.asyncio
-async def test_get_contatos_and_sync(monkeypatch):
-    import app.routers.contatos as contatos_mod
+async def test_get_contatos(monkeypatch):
+    import app.modules.contatos.router as contatos_mod
 
     monkeypatch.setattr(contatos_mod, "ContatoRepository", lambda db: FakeRepo(db))
 
-    # override auth dependency for sync endpoint
-    from app.core.auth import get_current_user
+    from app.modules.auth.service import get_current_user
 
     app.dependency_overrides.clear()
-    app.dependency_overrides[get_current_user] = lambda: type("U", (), {"nome": "Tester"})()
+    app.dependency_overrides[get_current_user] = lambda: type(
+        "U", (), {"nome": "Tester", "email": "tester@example.com", "papel": "CONSULTOR"}
+    )()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         r = await ac.get("/api/contatos/")
@@ -59,8 +53,72 @@ async def test_get_contatos_and_sync(monkeypatch):
         data = r.json()
         assert isinstance(data, list) and len(data) == 2
 
-        payload = {"contatos": [data[0]]}
-        r2 = await ac.post("/api/contatos/sync", json=payload)
-        assert r2.status_code == 200
-        d2 = r2.json()
-        assert d2.get("sucesso") is True
+
+@pytest.mark.asyncio
+async def test_consultor_nao_pode_criar_contato(monkeypatch):
+    """RBAC: CONSULTOR tem apenas leitura; escrita deve ser bloqueada (403)."""
+    import app.modules.contatos.router as contatos_mod
+
+    monkeypatch.setattr(contatos_mod, "ContatoRepository", lambda db: FakeRepo(db))
+
+    from app.modules.auth.service import get_current_user
+
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_current_user] = lambda: type(
+        "U", (), {"nome": "Tester", "email": "tester@example.com", "papel": "CONSULTOR"}
+    )()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        r = await ac.post(
+            "/api/contatos/criar-editar",
+            json={
+                "id": str(uuid4()),
+                "nome": "Novo Contato",
+                "telefone": "(14) 3811-9999",
+                "tipo_numero": "publico",
+            },
+        )
+
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_gestor_pode_criar_contato(monkeypatch):
+    import app.modules.contatos.router as contatos_mod
+
+    monkeypatch.setattr(contatos_mod, "ContatoRepository", lambda db: FakeRepo(db))
+
+    from app.modules.auth.service import get_current_user
+
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_current_user] = lambda: type(
+        "U", (), {"nome": "Tester", "email": "gestor@example.com", "papel": "GESTOR"}
+    )()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        r = await ac.post(
+            "/api/contatos/criar-editar",
+            json={
+                "id": str(uuid4()),
+                "nome": "Novo Contato",
+                "telefone": "(14) 3811-9999",
+                "tipo_numero": "publico",
+            },
+        )
+
+    assert r.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_listar_contatos_sem_autenticacao_e_negado(monkeypatch):
+    """Leitura de contatos agora exige autenticação (ao menos CONSULTOR)."""
+    import app.modules.contatos.router as contatos_mod
+
+    monkeypatch.setattr(contatos_mod, "ContatoRepository", lambda db: FakeRepo(db))
+
+    app.dependency_overrides.clear()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        r = await ac.get("/api/contatos/")
+
+    assert r.status_code == 401
