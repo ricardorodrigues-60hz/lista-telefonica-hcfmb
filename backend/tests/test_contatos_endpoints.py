@@ -27,7 +27,10 @@ class FakeRepo:
     async def listar_ativos(self):
         return [FakeContato(nome="A"), FakeContato(nome="B")]
 
-    async def salvar_ou_atualizar(self, contato_id, contato_in, usuario_email):
+    async def criar(self, contato_id, contato_in, usuario_email):
+        return FakeContato(id=contato_id, nome=contato_in.nome)
+
+    async def atualizar(self, contato_id, contato_in, usuario_email):
         return FakeContato(id=contato_id, nome=contato_in.nome)
 
     async def deletar_soft(self, contato_id, usuario_email):
@@ -69,7 +72,7 @@ async def test_consultor_nao_pode_criar_contato(monkeypatch):
     )()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        r = await ac.put(
+        r = await ac.post(
             f"/api/contatos/{uuid4()}",
             json={
                 "nome": "Novo Contato",
@@ -95,7 +98,7 @@ async def test_gestor_pode_criar_contato(monkeypatch):
     )()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        r = await ac.put(
+        r = await ac.post(
             f"/api/contatos/{uuid4()}",
             json={
                 "nome": "Novo Contato",
@@ -104,7 +107,7 @@ async def test_gestor_pode_criar_contato(monkeypatch):
             },
         )
 
-    assert r.status_code == 200
+    assert r.status_code == 201
 
 
 @pytest.mark.asyncio

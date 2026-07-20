@@ -307,7 +307,7 @@ export default function Home() {
       // If we are online, also hit the online direct CRUD endpoint
       try {
         const res = await fetch(`${API_BASE}/contatos/${id}`, {
-          method: 'PUT',
+          method: editingContactId ? 'PUT' : 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`

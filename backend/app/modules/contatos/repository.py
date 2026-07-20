@@ -20,7 +20,7 @@ class ContatoRepository:
     A resolução de conflitos da sincronização offline fica no
     ``SyncService`` (módulo ``sync``); este repository apenas expõe métodos
     de persistência puros que aceitam um timestamp explícito, para que tanto
-    o fluxo "online" (``salvar_ou_atualizar``) quanto o fluxo de sync possam
+    o fluxo "online" (``criar``/``atualizar``) quanto o fluxo de sync possam
     reutilizá-lo.
     """
 
@@ -37,45 +37,73 @@ class ContatoRepository:
         result = await self.db.execute(select(Contato).where(Contato.id == contato_id))
         return result.scalars().first()
 
-    async def salvar_ou_atualizar(
+    async def criar(
         self, contato_id: UUID, contato_in: ContatoBase, usuario_nome: str
     ) -> Contato:
-        """Cria ou atualiza (upsert) o contato identificado por `contato_id` (fluxo online).
+        """Cria um novo contato com o `contato_id` fornecido (fluxo online).
 
-        Se o contato já existir, é atualizado; caso contrário, um novo
-        contato é criado com esse mesmo ID (UUID gerado pelo cliente).
+        O UUID já é gerado pelo cliente (offline-first). Lança ``ValueError``
+        se já existir um contato com esse ID.
         """
-        contato = await self.buscar_por_id(str(contato_id))
-        acao = "EDITAR" if contato else "CRIAR"
+        existente = await self.buscar_por_id(str(contato_id))
+        if existente:
+            raise ValueError("Já existe um contato com esse ID.")
 
         now = _now_naive_utc()
-
-        if contato:
-            contato.nome = contato_in.nome
-            contato.telefone = contato_in.telefone
-            contato.email = contato_in.email
-            contato.tipo_numero = contato_in.tipo_numero
-            contato.atualizado_em = now
-            contato.excluido = False  # Reverte soft-delete se o contato for re-editado.
-        else:
-            contato = Contato(
-                id=str(contato_id),  # Respeita o UUID já gerado pelo cliente
-                nome=contato_in.nome,
-                telefone=contato_in.telefone,
-                email=contato_in.email,
-                tipo_numero=contato_in.tipo_numero,
-                criado_em=now,
-                atualizado_em=now,
-                excluido=False,
-            )
-            self.db.add(contato)
+        contato = Contato(
+            id=str(contato_id),  # Respeita o UUID já gerado pelo cliente
+            nome=contato_in.nome,
+            telefone=contato_in.telefone,
+            email=contato_in.email,
+            tipo_numero=contato_in.tipo_numero,
+            criado_em=now,
+            atualizado_em=now,
+            excluido=False,
+        )
+        self.db.add(contato)
 
         self.auditoria.registrar(
             usuario_nome=usuario_nome,
-            acao=acao,
+            acao="CRIAR",
             tabela="contatos",
             registro_id=contato.id,
-            detalhes=f"Contato {contato.nome} ({contato.telefone}) {acao.lower()}do via painel online.",
+            detalhes=f"Contato {contato.nome} ({contato.telefone}) criado via painel online.",
+            dados_modificados={
+                "nome": contato.nome,
+                "telefone": contato.telefone,
+                "email": contato.email,
+                "tipo_numero": contato.tipo_numero,
+            },
+        )
+
+        await self.db.commit()
+        await self.db.refresh(contato)
+        return contato
+
+    async def atualizar(
+        self, contato_id: UUID, contato_in: ContatoBase, usuario_nome: str
+    ) -> Optional[Contato]:
+        """Atualiza o contato existente identificado por `contato_id` (fluxo online).
+
+        Retorna ``None`` se nenhum contato com esse ID existir.
+        """
+        contato = await self.buscar_por_id(str(contato_id))
+        if not contato:
+            return None
+
+        contato.nome = contato_in.nome
+        contato.telefone = contato_in.telefone
+        contato.email = contato_in.email
+        contato.tipo_numero = contato_in.tipo_numero
+        contato.atualizado_em = _now_naive_utc()
+        contato.excluido = False  # Reverte soft-delete se o contato for re-editado.
+
+        self.auditoria.registrar(
+            usuario_nome=usuario_nome,
+            acao="EDITAR",
+            tabela="contatos",
+            registro_id=contato.id,
+            detalhes=f"Contato {contato.nome} ({contato.telefone}) editado via painel online.",
             dados_modificados={
                 "nome": contato.nome,
                 "telefone": contato.telefone,

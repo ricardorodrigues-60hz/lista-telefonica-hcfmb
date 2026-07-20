@@ -24,21 +24,37 @@ async def get_contatos(
     return await repo.listar_ativos()
 
 
-@router.put("/{contato_id}", response_model=ContatoResponse)
-async def criar_ou_atualizar_contato(
+@router.post("/{contato_id}", response_model=ContatoResponse, status_code=status.HTTP_201_CREATED)
+async def create_contato(
     contato_id: UUID,
     payload: ContatoBase,
     usuario: Usuario = Depends(require_gestor),
     db: AsyncSession = Depends(get_db),
 ):
-    """Cria ou atualiza (upsert) o contato identificado por `contato_id`. Restrito a GESTOR.
+    """Cria um novo contato com o `contato_id` fornecido. Restrito a GESTOR.
 
-    O UUID é sempre gerado pelo cliente (offline-first); por isso o mesmo
-    verbo/endpoint serve tanto para criar quanto para editar, dependendo de
-    o ID já existir ou não no servidor.
+    O UUID é sempre gerado pelo cliente (offline-first).
     """
     repo = ContatoRepository(db)
-    return await repo.salvar_ou_atualizar(contato_id, payload, usuario.email)
+    try:
+        return await repo.criar(contato_id, payload, usuario.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+
+@router.put("/{contato_id}", response_model=ContatoResponse)
+async def update_contato(
+    contato_id: UUID,
+    payload: ContatoBase,
+    usuario: Usuario = Depends(require_gestor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Atualiza o contato identificado por `contato_id`. Restrito a GESTOR."""
+    repo = ContatoRepository(db)
+    contato = await repo.atualizar(contato_id, payload, usuario.email)
+    if not contato:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contato não encontrado.")
+    return contato
 
 
 @router.delete("/{contato_id}", status_code=status.HTTP_204_NO_CONTENT)
