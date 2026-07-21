@@ -5,7 +5,7 @@ from uuid import uuid4
 from httpx import AsyncClient, ASGITransport
 
 from app.main import app
-from app.modules.auth.service import get_current_user
+from app.modules.auth import get_current_user
 
 
 class FakeContato:
@@ -52,7 +52,7 @@ def _override_usuario_atual(papel="CONSULTOR"):
 
 @pytest.mark.asyncio
 async def test_sync_cria_contato_novo(monkeypatch):
-    import app.modules.sync.service as sync_service_mod
+    import app.modules.sync as sync_service_mod
 
     fake_repo = FakeContatoRepository()
     monkeypatch.setattr(sync_service_mod, "ContatoRepository", lambda db: fake_repo)
@@ -87,7 +87,7 @@ async def test_sync_cria_contato_novo(monkeypatch):
 @pytest.mark.asyncio
 async def test_sync_conflito_aplica_last_write_wins(monkeypatch):
     """Alteração offline mais recente que o servidor deve prevalecer."""
-    import app.modules.sync.service as sync_service_mod
+    import app.modules.sync as sync_service_mod
 
     fake_repo = FakeContatoRepository()
     contato_id = str(uuid4())
@@ -123,7 +123,7 @@ async def test_sync_conflito_aplica_last_write_wins(monkeypatch):
 @pytest.mark.asyncio
 async def test_sync_conflito_ignora_alteracao_desatualizada(monkeypatch):
     """Alteração offline mais antiga que o servidor deve ser descartada."""
-    import app.modules.sync.service as sync_service_mod
+    import app.modules.sync as sync_service_mod
 
     fake_repo = FakeContatoRepository()
     contato_id = str(uuid4())
@@ -159,7 +159,7 @@ async def test_sync_conflito_ignora_alteracao_desatualizada(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_sync_requer_autenticacao(monkeypatch):
-    import app.modules.sync.service as sync_service_mod
+    import app.modules.sync as sync_service_mod
 
     monkeypatch.setattr(sync_service_mod, "ContatoRepository", lambda db: FakeContatoRepository())
     app.dependency_overrides.clear()

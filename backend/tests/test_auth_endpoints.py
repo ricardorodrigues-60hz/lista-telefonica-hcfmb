@@ -99,7 +99,7 @@ def _sempre_senha_correta(senha_esperada):
 
 
 def _patch_auth_deps(monkeypatch, usuario=None):
-    import app.modules.auth.service as auth_service_mod
+    import app.modules.auth as auth_service_mod
 
     fake_usuarios = FakeUsuarioRepo(usuario)
     fake_refresh = FakeRefreshRepo()

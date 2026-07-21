@@ -39,11 +39,11 @@ class FakeRepo:
 
 @pytest.mark.asyncio
 async def test_get_contatos(monkeypatch):
-    import app.modules.contatos.router as contatos_mod
+    import app.modules.contatos as contatos_mod
 
     monkeypatch.setattr(contatos_mod, "ContatoRepository", lambda db: FakeRepo(db))
 
-    from app.modules.auth.service import get_current_user
+    from app.modules.auth import get_current_user
 
     app.dependency_overrides.clear()
     app.dependency_overrides[get_current_user] = lambda: type(
@@ -60,11 +60,11 @@ async def test_get_contatos(monkeypatch):
 @pytest.mark.asyncio
 async def test_consultor_nao_pode_criar_contato(monkeypatch):
     """RBAC: CONSULTOR tem apenas leitura; escrita deve ser bloqueada (403)."""
-    import app.modules.contatos.router as contatos_mod
+    import app.modules.contatos as contatos_mod
 
     monkeypatch.setattr(contatos_mod, "ContatoRepository", lambda db: FakeRepo(db))
 
-    from app.modules.auth.service import get_current_user
+    from app.modules.auth import get_current_user
 
     app.dependency_overrides.clear()
     app.dependency_overrides[get_current_user] = lambda: type(
@@ -86,11 +86,11 @@ async def test_consultor_nao_pode_criar_contato(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_gestor_pode_criar_contato(monkeypatch):
-    import app.modules.contatos.router as contatos_mod
+    import app.modules.contatos as contatos_mod
 
     monkeypatch.setattr(contatos_mod, "ContatoRepository", lambda db: FakeRepo(db))
 
-    from app.modules.auth.service import get_current_user
+    from app.modules.auth import get_current_user
 
     app.dependency_overrides.clear()
     app.dependency_overrides[get_current_user] = lambda: type(
@@ -112,11 +112,11 @@ async def test_gestor_pode_criar_contato(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_gestor_pode_deletar_contato(monkeypatch):
-    import app.modules.contatos.router as contatos_mod
+    import app.modules.contatos as contatos_mod
 
     monkeypatch.setattr(contatos_mod, "ContatoRepository", lambda db: FakeRepo(db))
 
-    from app.modules.auth.service import get_current_user
+    from app.modules.auth import get_current_user
 
     app.dependency_overrides.clear()
     app.dependency_overrides[get_current_user] = lambda: type(
@@ -131,11 +131,11 @@ async def test_gestor_pode_deletar_contato(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_consultor_nao_pode_deletar_contato(monkeypatch):
-    import app.modules.contatos.router as contatos_mod
+    import app.modules.contatos as contatos_mod
 
     monkeypatch.setattr(contatos_mod, "ContatoRepository", lambda db: FakeRepo(db))
 
-    from app.modules.auth.service import get_current_user
+    from app.modules.auth import get_current_user
 
     app.dependency_overrides.clear()
     app.dependency_overrides[get_current_user] = lambda: type(
@@ -151,7 +151,7 @@ async def test_consultor_nao_pode_deletar_contato(monkeypatch):
 @pytest.mark.asyncio
 async def test_listar_contatos_sem_autenticacao_e_negado(monkeypatch):
     """Leitura de contatos agora exige autenticação (ao menos CONSULTOR)."""
-    import app.modules.contatos.router as contatos_mod
+    import app.modules.contatos as contatos_mod
 
     monkeypatch.setattr(contatos_mod, "ContatoRepository", lambda db: FakeRepo(db))
 

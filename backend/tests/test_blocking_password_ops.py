@@ -1,6 +1,6 @@
 import threading
 import pytest
-from app.core.security import async_get_password_hash, async_verify_password
+from app.core import async_get_password_hash, async_verify_password
 
 
 @pytest.mark.asyncio
@@ -12,7 +12,7 @@ async def test_get_password_hash_runs_in_thread(monkeypatch):
         assert threading.current_thread() is not main_thread, "get_password_hash ran on main thread"
         return "hashed"
 
-    import app.core.security as security_mod
+    import app.core as security_mod
     monkeypatch.setattr(security_mod, "get_password_hash", patched_hash)
 
     res = await async_get_password_hash("my-password")
@@ -28,7 +28,7 @@ async def test_verify_password_runs_in_thread(monkeypatch):
         assert threading.current_thread() is not main_thread, "verify_password ran on main thread"
         return True
 
-    import app.core.security as security_mod
+    import app.core as security_mod
     monkeypatch.setattr(security_mod, "verify_password", patched_verify)
 
     res = await async_verify_password("plain", "hashed")

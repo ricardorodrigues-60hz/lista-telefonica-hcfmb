@@ -1,8 +1,8 @@
 from pydantic import ValidationError
 
-from app.modules.contatos.schemas import ContatoBase
-from app.modules.auth.schemas import LoginRequest
-from app.modules.usuarios.schemas import UsuarioCreate
+from app.modules.contatos import ContatoBase
+from app.modules.auth import LoginRequest
+from app.modules.usuarios import UsuarioCreate
 
 
 def test_contato_create_valid():

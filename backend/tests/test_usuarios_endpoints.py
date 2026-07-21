@@ -4,7 +4,7 @@ from httpx import AsyncClient
 from httpx import ASGITransport
 
 from app.main import app
-from app.modules.auth.service import get_current_user
+from app.modules.auth import get_current_user
 
 
 class DummyUsuario:
@@ -54,7 +54,7 @@ class FakeUsuarioRepo:
 
 
 def _override_usuario_atual(monkeypatch, fake_repo, usuario_atual):
-    import app.modules.usuarios.router as usuarios_mod
+    import app.modules.usuarios as usuarios_mod
 
     app.dependency_overrides.clear()
     app.dependency_overrides[get_current_user] = lambda: usuario_atual
