@@ -125,5 +125,3 @@ Cobertura: autenticação/refresh, RBAC de contatos e usuários, sincronização
 Backend: FastAPI 0.138 · SQLAlchemy 2.0 (async) · Pydantic 2.13 · python-jose · bcrypt · Alembic
 Frontend: Next.js 16 (App Router) · React 19 · Dexie.js 4.4 · TypeScript 5 · @ducanh2912/next-pwa
 
----
-*Desenvolvido pelo Estagiário Ricardo Florentino Rodrigues — Núcleo de Apoio à Gestão do HCFMB, Botucatu-SP*
