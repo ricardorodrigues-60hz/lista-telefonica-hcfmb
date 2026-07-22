@@ -1,29 +1,27 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
-from httpx import AsyncClient
-from httpx import ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 
-
-SENHA_CORRETA = "senha-correta"
+SENHA_CORRETA = 'senha-correta'
 
 
 class DummyUsuario:
     def __init__(
         self,
-        id="user-1",
-        email="gestor@hcfmb.unesp.br",
-        papel="GESTOR",
-        nome="Gestor Teste",
+        id='user-1',
+        email='gestor@hcfmb.unesp.br',
+        papel='GESTOR',
+        nome='Gestor Teste',
         excluido=False,
     ):
         self.id = id
         self.email = email
         self.papel = papel
         self.nome = nome
-        self.senha_hash = "hash-fake"
+        self.senha_hash = 'hash-fake'
         self.excluido = excluido
 
 
@@ -58,7 +56,10 @@ class FakeRefreshRepo:
     async def criar(self, usuario_id, token_hash, expira_em):
         self._contador += 1
         registro = FakeRefreshRegistro(
-            id=f"rt-{self._contador}", usuario_id=usuario_id, token_hash=token_hash, expira_em=expira_em
+            id=f'rt-{self._contador}',
+            usuario_id=usuario_id,
+            token_hash=token_hash,
+            expira_em=expira_em,
         )
         self._por_hash[token_hash] = registro
         return registro
@@ -104,9 +105,17 @@ def _patch_auth_deps(monkeypatch, usuario=None):
     fake_usuarios = FakeUsuarioRepo(usuario)
     fake_refresh = FakeRefreshRepo()
 
-    monkeypatch.setattr(auth_service_mod, "UsuarioRepository", lambda db: fake_usuarios)
-    monkeypatch.setattr(auth_service_mod, "RefreshTokenRepository", lambda db: fake_refresh)
-    monkeypatch.setattr(auth_service_mod, "async_verify_password", _sempre_senha_correta(SENHA_CORRETA))
+    monkeypatch.setattr(
+        auth_service_mod, 'UsuarioRepository', lambda db: fake_usuarios
+    )
+    monkeypatch.setattr(
+        auth_service_mod, 'RefreshTokenRepository', lambda db: fake_refresh
+    )
+    monkeypatch.setattr(
+        auth_service_mod,
+        'async_verify_password',
+        _sempre_senha_correta(SENHA_CORRETA),
+    )
 
     return fake_usuarios, fake_refresh
 
@@ -116,16 +125,20 @@ async def test_login_sucesso(monkeypatch):
     _patch_auth_deps(monkeypatch)
     app.dependency_overrides.clear()
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url='http://test'
+    ) as ac:
         r = await ac.post(
-            "/api/auth/login", json={"login": "gestor@hcfmb.unesp.br", "senha": SENHA_CORRETA}
+            '/api/auth/login',
+            json={'login': 'gestor@hcfmb.unesp.br', 'senha': SENHA_CORRETA},
         )
 
     assert r.status_code == 200
     data = r.json()
-    assert "access_token" in data and "refresh_token" in data
-    assert data["papel"] == "GESTOR"
-    assert data["nome"] == "Gestor Teste"
+    assert 'access_token' in data
+    assert 'refresh_token' in data
+    assert data['papel'] == 'GESTOR'
+    assert data['nome'] == 'Gestor Teste'
 
 
 @pytest.mark.asyncio
@@ -133,9 +146,12 @@ async def test_login_senha_incorreta(monkeypatch):
     _patch_auth_deps(monkeypatch)
     app.dependency_overrides.clear()
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url='http://test'
+    ) as ac:
         r = await ac.post(
-            "/api/auth/login", json={"login": "gestor@hcfmb.unesp.br", "senha": "senha-errada"}
+            '/api/auth/login',
+            json={'login': 'gestor@hcfmb.unesp.br', 'senha': 'senha-errada'},
         )
 
     assert r.status_code == 401
@@ -146,9 +162,12 @@ async def test_login_usuario_inexistente(monkeypatch):
     _patch_auth_deps(monkeypatch)
     app.dependency_overrides.clear()
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url='http://test'
+    ) as ac:
         r = await ac.post(
-            "/api/auth/login", json={"login": "ninguem@hcfmb.unesp.br", "senha": SENHA_CORRETA}
+            '/api/auth/login',
+            json={'login': 'ninguem@hcfmb.unesp.br', 'senha': SENHA_CORRETA},
         )
 
     assert r.status_code == 401
@@ -160,9 +179,12 @@ async def test_login_usuario_excluido(monkeypatch):
     _patch_auth_deps(monkeypatch, usuario)
     app.dependency_overrides.clear()
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url='http://test'
+    ) as ac:
         r = await ac.post(
-            "/api/auth/login", json={"login": usuario.email, "senha": SENHA_CORRETA}
+            '/api/auth/login',
+            json={'login': usuario.email, 'senha': SENHA_CORRETA},
         )
 
     assert r.status_code == 401
@@ -173,21 +195,29 @@ async def test_refresh_gera_novo_par_e_rotaciona_o_antigo(monkeypatch):
     _patch_auth_deps(monkeypatch)
     app.dependency_overrides.clear()
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url='http://test'
+    ) as ac:
         r = await ac.post(
-            "/api/auth/login", json={"login": "gestor@hcfmb.unesp.br", "senha": SENHA_CORRETA}
+            '/api/auth/login',
+            json={'login': 'gestor@hcfmb.unesp.br', 'senha': SENHA_CORRETA},
         )
         assert r.status_code == 200
-        refresh_original = r.json()["refresh_token"]
+        refresh_original = r.json()['refresh_token']
 
-        r2 = await ac.post("/api/auth/refresh", json={"refresh_token": refresh_original})
+        r2 = await ac.post(
+            '/api/auth/refresh', json={'refresh_token': refresh_original}
+        )
         assert r2.status_code == 200
         d2 = r2.json()
-        assert "access_token" in d2 and "refresh_token" in d2
-        assert d2["refresh_token"] != refresh_original
+        assert 'access_token' in d2
+        assert 'refresh_token' in d2
+        assert d2['refresh_token'] != refresh_original
 
         # Reusar o refresh token já rotacionado deve ser rejeitado (rotação real).
-        r3 = await ac.post("/api/auth/refresh", json={"refresh_token": refresh_original})
+        r3 = await ac.post(
+            '/api/auth/refresh', json={'refresh_token': refresh_original}
+        )
         assert r3.status_code == 401
 
 
@@ -196,21 +226,30 @@ async def test_reuso_de_refresh_token_revoga_todas_as_sessoes(monkeypatch):
     _, fake_refresh = _patch_auth_deps(monkeypatch)
     app.dependency_overrides.clear()
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url='http://test'
+    ) as ac:
         r = await ac.post(
-            "/api/auth/login", json={"login": "gestor@hcfmb.unesp.br", "senha": SENHA_CORRETA}
+            '/api/auth/login',
+            json={'login': 'gestor@hcfmb.unesp.br', 'senha': SENHA_CORRETA},
         )
-        refresh_original = r.json()["refresh_token"]
+        refresh_original = r.json()['refresh_token']
 
-        r2 = await ac.post("/api/auth/refresh", json={"refresh_token": refresh_original})
+        r2 = await ac.post(
+            '/api/auth/refresh', json={'refresh_token': refresh_original}
+        )
         assert r2.status_code == 200
-        refresh_novo = r2.json()["refresh_token"]
+        refresh_novo = r2.json()['refresh_token']
 
         # Reapresentar o token antigo (já rotacionado) deve revogar a sessão nova também.
-        r3 = await ac.post("/api/auth/refresh", json={"refresh_token": refresh_original})
+        r3 = await ac.post(
+            '/api/auth/refresh', json={'refresh_token': refresh_original}
+        )
         assert r3.status_code == 401
 
-        r4 = await ac.post("/api/auth/refresh", json={"refresh_token": refresh_novo})
+        r4 = await ac.post(
+            '/api/auth/refresh', json={'refresh_token': refresh_novo}
+        )
         assert r4.status_code == 401
 
 
@@ -219,14 +258,21 @@ async def test_logout_revoga_refresh_token(monkeypatch):
     _patch_auth_deps(monkeypatch)
     app.dependency_overrides.clear()
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url='http://test'
+    ) as ac:
         r = await ac.post(
-            "/api/auth/login", json={"login": "gestor@hcfmb.unesp.br", "senha": SENHA_CORRETA}
+            '/api/auth/login',
+            json={'login': 'gestor@hcfmb.unesp.br', 'senha': SENHA_CORRETA},
         )
-        refresh_token = r.json()["refresh_token"]
+        refresh_token = r.json()['refresh_token']
 
-        r_logout = await ac.post("/api/auth/logout", json={"refresh_token": refresh_token})
+        r_logout = await ac.post(
+            '/api/auth/logout', json={'refresh_token': refresh_token}
+        )
         assert r_logout.status_code == 204
 
-        r_refresh = await ac.post("/api/auth/refresh", json={"refresh_token": refresh_token})
+        r_refresh = await ac.post(
+            '/api/auth/refresh', json={'refresh_token': refresh_token}
+        )
         assert r_refresh.status_code == 401

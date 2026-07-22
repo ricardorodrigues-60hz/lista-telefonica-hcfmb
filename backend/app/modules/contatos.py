@@ -11,32 +11,51 @@ Consolida o conteúdo de:
 
 from __future__ import annotations
 
+import datetime
+
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
-
 import json
-from datetime import datetime
-from typing import Optional
+import re
+from datetime import datetime, timezone
+from enum import Enum
+from typing import List, Optional
+from uuid import UUID
 
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    field_validator,
+)
 from sqlalchemy import Boolean, DateTime, Integer, String, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core import Base
+from app.core import Base, get_db
 
 
 class AuditTrail(Base):
     """Trilha de auditoria imutável para qualquer operação de escrita no sistema."""
 
-    __tablename__ = "audit_trail"
+    __tablename__ = 'audit_trail'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     usuario_nome: Mapped[str] = mapped_column(String, nullable=False)
-    acao: Mapped[str] = mapped_column(String, nullable=False)  # "CRIAR", "EDITAR", "EXCLUIR"...
-    tabela: Mapped[str] = mapped_column(String, nullable=False, default="contatos")
+    acao: Mapped[str] = mapped_column(
+        String, nullable=False
+    )  # "CRIAR", "EDITAR", "EXCLUIR"...
+    tabela: Mapped[str] = mapped_column(
+        String, nullable=False, default='contatos'
+    )
     registro_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     detalhes: Mapped[str] = mapped_column(String, nullable=False)
-    dados_modificados: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # JSON serializado
+    dados_modificados: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True
+    )  # JSON serializado
 
     # Gravado nativamente pelo banco de dados no momento do INSERT
     criado_em: Mapped[datetime] = mapped_column(
@@ -46,42 +65,30 @@ class AuditTrail(Base):
 
 
 class Contato(Base):
-    __tablename__ = "contatos"
+    __tablename__ = 'contatos'
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, index=True)  # UUID
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, index=True
+    )  # UUID
     nome: Mapped[str] = mapped_column(String, nullable=False, index=True)
     telefone: Mapped[str] = mapped_column(String(50), nullable=False)
     email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    tipo_numero: Mapped[str] = mapped_column(String, nullable=False)  # "institucional" ou "publico"
+    tipo_numero: Mapped[str] = mapped_column(
+        String, nullable=False
+    )  # "institucional" ou "publico"
 
     criado_em: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now()
+        DateTime(timezone=True), server_default=func.now()
     )
     atualizado_em: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     excluido: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
-import datetime
-import re
-from enum import Enum
-from uuid import UUID
-
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    EmailStr,
-    field_validator,
-)
-
-
 class TipoNumero(str, Enum):
-    INSTITUCIONAL = "institucional"
-    PUBLICO = "publico"
+    INSTITUCIONAL = 'institucional'
+    PUBLICO = 'publico'
 
 
 class ContatoBase(BaseModel):
@@ -90,13 +97,13 @@ class ContatoBase(BaseModel):
     email: Optional[EmailStr] = None
     tipo_numero: TipoNumero = TipoNumero.PUBLICO
 
-    @field_validator("telefone")
+    @field_validator('telefone')
     def validate_telefone(cls, v: str) -> str:  # type: ignore[override]
-        if not re.match(r"^[0-9\+\(\)\s\-\.]+$", v):
-            raise ValueError("telefone inválido")
-        digits = re.sub(r"\D", "", v)
+        if not re.match(r'^[0-9\+\(\)\s\-\.]+$', v):
+            raise ValueError('telefone inválido')
+        digits = re.sub(r'\D', '', v)
         if len(digits) < 8:
-            raise ValueError("telefone inválido")
+            raise ValueError('telefone inválido')
         return v
 
 
@@ -119,12 +126,6 @@ class ContatoResponse(ContatoBase):
 # ---------------------------------------------------------------------------
 # Repositories
 # ---------------------------------------------------------------------------
-
-from datetime import timezone
-from typing import List
-
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
 
 
 def _serializar(dados: dict) -> str:
@@ -162,14 +163,18 @@ class AuditoriaRepository:
             tabela=tabela,
             registro_id=registro_id,
             detalhes=detalhes,
-            dados_modificados=_serializar(dados_modificados) if dados_modificados is not None else None,
+            dados_modificados=_serializar(dados_modificados)
+            if dados_modificados is not None
+            else None,
         )
         self.db.add(entrada)
         return entrada
 
     async def listar_por_tabela(self, tabela: str) -> List[AuditTrail]:
         result = await self.db.execute(
-            select(AuditTrail).where(AuditTrail.tabela == tabela).order_by(AuditTrail.criado_em.desc())
+            select(AuditTrail)
+            .where(AuditTrail.tabela == tabela)
+            .order_by(AuditTrail.criado_em.desc())
         )
         return list(result.scalars().all())
 
@@ -188,11 +193,15 @@ class ContatoRepository:
 
     async def listar_ativos(self) -> List[Contato]:
         """Lista todos os contatos ativos (não excluídos por soft-delete)."""
-        result = await self.db.execute(select(Contato).where(Contato.excluido == False))
+        result = await self.db.execute(
+            select(Contato).where(not Contato.excluido)
+        )
         return list(result.scalars().all())
 
     async def buscar_por_id(self, contato_id: str) -> Optional[Contato]:
-        result = await self.db.execute(select(Contato).where(Contato.id == contato_id))
+        result = await self.db.execute(
+            select(Contato).where(Contato.id == contato_id)
+        )
         return result.scalars().first()
 
     async def criar(
@@ -205,7 +214,7 @@ class ContatoRepository:
         """
         existente = await self.buscar_por_id(str(contato_id))
         if existente:
-            raise ValueError("Já existe um contato com esse ID.")
+            raise ValueError('Já existe um contato com esse ID.')
 
         now = _now_naive_utc()
         contato = Contato(
@@ -222,15 +231,15 @@ class ContatoRepository:
 
         self.auditoria.registrar(
             usuario_nome=usuario_nome,
-            acao="CRIAR",
-            tabela="contatos",
+            acao='CRIAR',
+            tabela='contatos',
             registro_id=contato.id,
-            detalhes=f"Contato {contato.nome} ({contato.telefone}) criado via painel online.",
+            detalhes=f'Contato {contato.nome} ({contato.telefone}) criado via painel online.',
             dados_modificados={
-                "nome": contato.nome,
-                "telefone": contato.telefone,
-                "email": contato.email,
-                "tipo_numero": contato.tipo_numero,
+                'nome': contato.nome,
+                'telefone': contato.telefone,
+                'email': contato.email,
+                'tipo_numero': contato.tipo_numero,
             },
         )
 
@@ -251,19 +260,21 @@ class ContatoRepository:
         contato.email = contato_in.email
         contato.tipo_numero = contato_in.tipo_numero
         contato.atualizado_em = _now_naive_utc()
-        contato.excluido = False  # Reverte soft-delete se o contato for re-editado.
+        contato.excluido = (
+            False  # Reverte soft-delete se o contato for re-editado.
+        )
 
         self.auditoria.registrar(
             usuario_nome=usuario_nome,
-            acao="EDITAR",
-            tabela="contatos",
+            acao='EDITAR',
+            tabela='contatos',
             registro_id=contato.id,
-            detalhes=f"Contato {contato.nome} ({contato.telefone}) editado via painel online.",
+            detalhes=f'Contato {contato.nome} ({contato.telefone}) editado via painel online.',
             dados_modificados={
-                "nome": contato.nome,
-                "telefone": contato.telefone,
-                "email": contato.email,
-                "tipo_numero": contato.tipo_numero,
+                'nome': contato.nome,
+                'telefone': contato.telefone,
+                'email': contato.email,
+                'tipo_numero': contato.tipo_numero,
             },
         )
 
@@ -282,11 +293,11 @@ class ContatoRepository:
 
         self.auditoria.registrar(
             usuario_nome=usuario_nome,
-            acao="DELETAR",
-            tabela="contatos",
+            acao='DELETAR',
+            tabela='contatos',
             registro_id=contato.id,
-            detalhes=f"Contato {contato.nome} marcado como excluído.",
-            dados_modificados={"excluido": True},
+            detalhes=f'Contato {contato.nome} marcado como excluído.',
+            dados_modificados={'excluido': True},
         )
 
         await self.db.commit()
@@ -324,11 +335,15 @@ class ContatoRepository:
 
         self.auditoria.registrar(
             usuario_nome=usuario_nome,
-            acao="CRIAR_SYNC",
-            tabela="contatos",
+            acao='CRIAR_SYNC',
+            tabela='contatos',
             registro_id=id,
-            detalhes=f"Sincronização offline: Contato {nome} criado.",
-            dados_modificados={"nome": nome, "telefone": telefone, "excluido": excluido},
+            detalhes=f'Sincronização offline: Contato {nome} criado.',
+            dados_modificados={
+                'nome': nome,
+                'telefone': telefone,
+                'excluido': excluido,
+            },
         )
         return contato
 
@@ -355,14 +370,18 @@ class ContatoRepository:
         contato.excluido = excluido
         contato.atualizado_em = timestamp
 
-        acao_base = "EXCLUIR" if excluido else "EDITAR"
+        acao_base = 'EXCLUIR' if excluido else 'EDITAR'
         self.auditoria.registrar(
             usuario_nome=usuario_nome,
-            acao=f"{acao_base}_SYNC",
-            tabela="contatos",
+            acao=f'{acao_base}_SYNC',
+            tabela='contatos',
             registro_id=contato.id,
-            detalhes=f"Sincronização offline: Contato {nome} atualizado (ação: {acao_base.lower()}).",
-            dados_modificados={"nome": nome, "telefone": telefone, "excluido": excluido},
+            detalhes=f'Sincronização offline: Contato {nome} atualizado (ação: {acao_base.lower()}).',
+            dados_modificados={
+                'nome': nome,
+                'telefone': telefone,
+                'excluido': excluido,
+            },
         )
         return contato
 
@@ -371,19 +390,16 @@ class ContatoRepository:
 # Router
 # ---------------------------------------------------------------------------
 
-from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.core import get_db
-
-router = APIRouter(tags=["Contatos"])
+router = APIRouter(tags=['Contatos'])
 
 
 def _build_router() -> APIRouter:
-    from app.modules.auth import require_gestor, require_consultor
+    from app.modules.auth import require_consultor, require_gestor
 
-    r = APIRouter(tags=["Contatos"])
+    r = APIRouter(tags=['Contatos'])
 
-    @r.get("/", response_model=List[ContatoResponse])
+    @r.get('/', response_model=List[ContatoResponse])
     async def get_contatos(
         usuario=Depends(require_consultor),
         db: AsyncSession = Depends(get_db),
@@ -392,7 +408,11 @@ def _build_router() -> APIRouter:
         repo = ContatoRepository(db)
         return await repo.listar_ativos()
 
-    @r.post("/{contato_id}", response_model=ContatoResponse, status_code=status.HTTP_201_CREATED)
+    @r.post(
+        '/{contato_id}',
+        response_model=ContatoResponse,
+        status_code=status.HTTP_201_CREATED,
+    )
     async def create_contato(
         contato_id: UUID,
         payload: ContatoBase,
@@ -407,9 +427,11 @@ def _build_router() -> APIRouter:
         try:
             return await repo.criar(contato_id, payload, usuario.email)
         except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+            )
 
-    @r.put("/{contato_id}", response_model=ContatoResponse)
+    @r.put('/{contato_id}', response_model=ContatoResponse)
     async def update_contato(
         contato_id: UUID,
         payload: ContatoBase,
@@ -420,10 +442,13 @@ def _build_router() -> APIRouter:
         repo = ContatoRepository(db)
         contato = await repo.atualizar(contato_id, payload, usuario.email)
         if not contato:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contato não encontrado.")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail='Contato não encontrado.',
+            )
         return contato
 
-    @r.delete("/{contato_id}", status_code=status.HTTP_204_NO_CONTENT)
+    @r.delete('/{contato_id}', status_code=status.HTTP_204_NO_CONTENT)
     async def deletar_contato(
         contato_id: UUID,
         usuario=Depends(require_gestor),
@@ -433,8 +458,9 @@ def _build_router() -> APIRouter:
         repo = ContatoRepository(db)
         sucesso = await repo.deletar_soft(str(contato_id), usuario.email)
         if not sucesso:
-            raise HTTPException(status_code=404, detail="Contato não encontrado.")
-        return None
+            raise HTTPException(
+                status_code=404, detail='Contato não encontrado.'
+            )
 
     return r
 

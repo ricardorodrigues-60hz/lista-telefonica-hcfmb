@@ -20,9 +20,12 @@ import datetime
 from typing import List, Optional
 from uuid import UUID
 
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.contatos import TipoNumero
+from app.core import get_db
+from app.modules.contatos import ContatoRepository, TipoNumero
 
 
 class ContatoSync(BaseModel):
@@ -34,7 +37,7 @@ class ContatoSync(BaseModel):
     atualizado_em: datetime.datetime
     excluido: bool = False
 
-    @field_validator("atualizado_em")
+    @field_validator('atualizado_em')
     def ensure_timezone(cls, v: datetime.datetime) -> datetime.datetime:  # type: ignore[override]
         if v.tzinfo is None:
             return v.replace(tzinfo=datetime.timezone.utc)
@@ -45,8 +48,10 @@ class SyncPayload(BaseModel):
     contatos: List[ContatoSync]
     ultima_sincronizacao: Optional[datetime.datetime] = None
 
-    @field_validator("ultima_sincronizacao")
-    def normalize_last_sync(cls, v: Optional[datetime.datetime]) -> Optional[datetime.datetime]:
+    @field_validator('ultima_sincronizacao')
+    def normalize_last_sync(
+        cls, v: Optional[datetime.datetime]
+    ) -> Optional[datetime.datetime]:
         if v is None:
             return None
         if v.tzinfo is None:
@@ -66,10 +71,6 @@ class SyncResponse(BaseModel):
 # Service
 # ---------------------------------------------------------------------------
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.modules.contatos import ContatoRepository
-
 
 class SyncService:
     def __init__(self, db: AsyncSession):
@@ -77,19 +78,31 @@ class SyncService:
         self.contatos = ContatoRepository(db)
 
     @staticmethod
-    def _timestamp_cliente_naive_utc(contato_sync: ContatoSync) -> datetime.datetime:
+    def _timestamp_cliente_naive_utc(
+        contato_sync: ContatoSync,
+    ) -> datetime.datetime:
         try:
-            return contato_sync.atualizado_em.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+            return contato_sync.atualizado_em.astimezone(
+                datetime.timezone.utc
+            ).replace(tzinfo=None)
         except Exception:
-            return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+            return datetime.datetime.now(datetime.timezone.utc).replace(
+                tzinfo=None
+            )
 
-    async def sincronizar(self, payload: SyncPayload, usuario_nome: str) -> SyncResponse:
+    async def sincronizar(
+        self, payload: SyncPayload, usuario_nome: str
+    ) -> SyncResponse:
         """Sincroniza em lote os contatos alterados offline, aplicando last-write-wins."""
         ids_confirmados: List = []
 
         for contato_sync in payload.contatos:
-            cliente_atualizado_em = self._timestamp_cliente_naive_utc(contato_sync)
-            contato_db = await self.contatos.buscar_por_id(str(contato_sync.id))
+            cliente_atualizado_em = self._timestamp_cliente_naive_utc(
+                contato_sync
+            )
+            contato_db = await self.contatos.buscar_por_id(
+                str(contato_sync.id)
+            )
 
             if contato_db:
                 # CONFLITO: só aceita a versão offline se ela for mais nova que a do banco.
@@ -127,17 +140,13 @@ class SyncService:
 # Router
 # ---------------------------------------------------------------------------
 
-from fastapi import APIRouter, Depends
-
-from app.core import get_db
-
 
 def _build_router() -> APIRouter:
     from app.modules.auth import require_consultor
 
-    r = APIRouter(tags=["Sincronização"])
+    r = APIRouter(tags=['Sincronização'])
 
-    @r.post("", response_model=SyncResponse)
+    @r.post('', response_model=SyncResponse)
     async def sync_contatos(
         payload: SyncPayload,
         usuario=Depends(require_consultor),

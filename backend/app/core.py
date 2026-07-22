@@ -13,22 +13,48 @@ Consolida o conteúdo de:
 # Config
 # ---------------------------------------------------------------------------
 
+import asyncio
+import hashlib
+import importlib.util
+import logging
+import os
+import sys
+import uuid
+import warnings
+from datetime import datetime, timedelta, timezone
+from datetime import timezone as _tz
+from typing import AsyncGenerator, Optional
+
+import bcrypt
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession
+from sqlalchemy.future import select as _select
+from sqlalchemy.orm import DeclarativeBase
 
 
 class Settings(BaseSettings):
     """Application settings."""
+
     # O Pydantic valida e tipa automaticamente as variáveis de ambiente,
     # garantindo que sejam do tipo correto e estejam presentes quando necessário.
-    DATABASE_URL: str = "sqlite+aiosqlite:///:memory:"
-    SECRET_KEY: str = "super-secret-key-padrao-caso-nao-exista-no-env"
-    ALGORITHM: str = "HS256"
+    DATABASE_URL: str = 'sqlite+aiosqlite:///:memory:'
+    SECRET_KEY: str = 'super-secret-key-padrao-caso-nao-exista-no-env'
+    ALGORITHM: str = 'HS256'
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-    TOKEN_URL: str = "/api/auth/login"
+    TOKEN_URL: str = '/api/auth/login'
 
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        env_file='.env', env_file_encoding='utf-8', extra='ignore'
     )
 
 
@@ -38,9 +64,6 @@ settings = Settings()
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
-
-import logging
-import sys
 
 
 def configure_logging(level: int = logging.INFO) -> None:
@@ -52,7 +75,9 @@ def configure_logging(level: int = logging.INFO) -> None:
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(
-        logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+        logging.Formatter(
+            '%(asctime)s | %(levelname)s | %(name)s | %(message)s'
+        )
     )
     root.addHandler(handler)
     root.setLevel(level)
@@ -62,26 +87,22 @@ def configure_logging(level: int = logging.INFO) -> None:
 # Database
 # ---------------------------------------------------------------------------
 
-import importlib.util
-import os
-import warnings
-from typing import AsyncGenerator
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
-
-_env_db = os.getenv("DATABASE_URL")
+_env_db = os.getenv('DATABASE_URL')
 
 
 def _choose_database_url(url: str | None) -> str:
     if not url:
-        return "sqlite+aiosqlite:///:memory:"
-    if url.startswith("postgresql+asyncpg") and importlib.util.find_spec("asyncpg") is None:
+        return 'sqlite+aiosqlite:///:memory:'
+    if (
+        url.startswith('postgresql+asyncpg')
+        and importlib.util.find_spec('asyncpg') is None
+    ):
         warnings.warn(
-            "asyncpg not installed; falling back to in-memory sqlite+aiosqlite for tests",
+            'asyncpg not installed; falling back to in-memory sqlite+aiosqlite for tests',
             RuntimeWarning,
         )
-        return "sqlite+aiosqlite:///:memory:"
+        return 'sqlite+aiosqlite:///:memory:'
     return url
 
 
@@ -113,15 +134,12 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 # Exceptions
 # ---------------------------------------------------------------------------
 
-from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse
-
 
 class AppError(Exception):
     """Base para todas as exceções de domínio da aplicação."""
 
     status_code: int = status.HTTP_400_BAD_REQUEST
-    detail: str = "Erro inesperado."
+    detail: str = 'Erro inesperado.'
 
     def __init__(self, detail: str | None = None):
         self.detail = detail or self.detail
@@ -130,31 +148,32 @@ class AppError(Exception):
 
 class CredenciaisInvalidasError(AppError):
     status_code = status.HTTP_401_UNAUTHORIZED
-    detail = "E-mail ou senha inválidos."
+    detail = 'E-mail ou senha inválidos.'
 
 
 class TokenInvalidoError(AppError):
     status_code = status.HTTP_401_UNAUTHORIZED
-    detail = "Refresh token inválido, revogado ou expirado."
+    detail = 'Refresh token inválido, revogado ou expirado.'
 
 
 class NaoAutenticadoError(AppError):
     status_code = status.HTTP_401_UNAUTHORIZED
-    detail = "Could not validate credentials"
+    detail = 'Could not validate credentials'
 
 
 class PermissaoNegadaError(AppError):
     status_code = status.HTTP_403_FORBIDDEN
-    detail = "Operação não permitida para o seu papel."
+    detail = 'Operação não permitida para o seu papel.'
 
 
 class RegistroNaoEncontradoError(AppError):
     status_code = status.HTTP_404_NOT_FOUND
-    detail = "Registro não encontrado."
+    detail = 'Registro não encontrado.'
 
 
 class RegraDeNegocioError(AppError):
     """Violação de uma regra de negócio (ex.: e-mail duplicado)."""
+
     status_code = status.HTTP_400_BAD_REQUEST
 
 
@@ -163,45 +182,49 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(AppError)
     async def _handle_app_error(_: Request, exc: AppError) -> JSONResponse:
-        headers = {"WWW-Authenticate": "Bearer"} if exc.status_code == status.HTTP_401_UNAUTHORIZED else None
-        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=headers)
+        headers = (
+            {'WWW-Authenticate': 'Bearer'}
+            if exc.status_code == status.HTTP_401_UNAUTHORIZED
+            else None
+        )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={'detail': exc.detail},
+            headers=headers,
+        )
 
 
 # ---------------------------------------------------------------------------
 # Security — JWT e hashing de senha
 # ---------------------------------------------------------------------------
 
-import asyncio
-import hashlib
-import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Optional
-
-import bcrypt
-from jose import JWTError, jwt
-from fastapi import HTTPException
-from fastapi.security import OAuth2PasswordBearer
 
 SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = settings.ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=settings.TOKEN_URL, auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl=settings.TOKEN_URL, auto_error=False
+)
 
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def create_access_token(usuario_id: str, papel: str, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(
+    usuario_id: str, papel: str, expires_delta: Optional[timedelta] = None
+) -> str:
     """Gera um access token JWT de curta duração."""
-    expire = _now_utc() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = _now_utc() + (
+        expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
     to_encode = {
-        "sub": usuario_id,
-        "role": papel,
-        "exp": int(expire.timestamp()),
-        "jti": str(uuid.uuid4()),
+        'sub': usuario_id,
+        'role': papel,
+        'exp': int(expire.timestamp()),
+        'jti': str(uuid.uuid4()),
     }
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -213,10 +236,10 @@ def create_refresh_token(usuario_id: str) -> tuple[str, datetime]:
     """
     expire = _now_utc() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode = {
-        "sub": usuario_id,
-        "refresh": True,
-        "exp": int(expire.timestamp()),
-        "jti": str(uuid.uuid4()),
+        'sub': usuario_id,
+        'refresh': True,
+        'exp': int(expire.timestamp()),
+        'jti': str(uuid.uuid4()),
     }
     token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return token, expire
@@ -224,7 +247,7 @@ def create_refresh_token(usuario_id: str) -> tuple[str, datetime]:
 
 def hash_refresh_token(token: str) -> str:
     """Hash (SHA-256) de um refresh token para persistência segura."""
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return hashlib.sha256(token.encode('utf-8')).hexdigest()
 
 
 def decode_token(token: str) -> dict:
@@ -234,19 +257,23 @@ def decode_token(token: str) -> dict:
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token inválido ou expirado.",
+            detail='Token inválido ou expirado.',
         )
 
 
 def get_password_hash(password: str) -> str:
     """Hash a password with bcrypt (blocking)."""
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode(
+        'utf-8'
+    )
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plaintext password against a bcrypt hash (blocking)."""
     try:
-        return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+        return bcrypt.checkpw(
+            plain_password.encode('utf-8'), hashed_password.encode('utf-8')
+        )
     except Exception:
         return False
 
@@ -256,25 +283,35 @@ async def async_get_password_hash(password: str) -> str:
     return await asyncio.to_thread(get_password_hash, password)
 
 
-async def async_verify_password(plain_password: str, hashed_password: str) -> bool:
+async def async_verify_password(
+    plain_password: str, hashed_password: str
+) -> bool:
     """Wrapper assíncrono: offload da verificação bcrypt para uma thread."""
-    return await asyncio.to_thread(verify_password, plain_password, hashed_password)
+    return await asyncio.to_thread(
+        verify_password, plain_password, hashed_password
+    )
 
 
 # ---------------------------------------------------------------------------
 # Init DB / Seeds
 # ---------------------------------------------------------------------------
 
-from datetime import timezone as _tz
-from sqlalchemy.future import select as _select
-from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession
-
 
 # Contas padrão de demonstração/desenvolvimento.
 # ATENÇÃO: altere (ou desative via RUN_SEEDS=0) essas senhas antes de qualquer deploy em produção.
 CONTAS_SEED = [
-    {"nome": "Gestor HCFMB", "email": "gestor@hcfmb.unesp.br", "senha": "gestor123", "papel": "GESTOR"},
-    {"nome": "Consultor HCFMB", "email": "consultor@hcfmb.unesp.br", "senha": "consultor123", "papel": "CONSULTOR"},
+    {
+        'nome': 'Gestor HCFMB',
+        'email': 'gestor@hcfmb.unesp.br',
+        'senha': 'gestor123',
+        'papel': 'GESTOR',
+    },
+    {
+        'nome': 'Consultor HCFMB',
+        'email': 'consultor@hcfmb.unesp.br',
+        'senha': 'consultor123',
+        'papel': 'CONSULTOR',
+    },
 ]
 
 
@@ -294,13 +331,15 @@ async def _seed_usuarios(db: _AsyncSession):
     from app.modules.usuarios import Usuario
 
     for conta in CONTAS_SEED:
-        res = await db.execute(_select(Usuario).where(Usuario.email == conta["email"]))
+        res = await db.execute(
+            _select(Usuario).where(Usuario.email == conta['email'])
+        )
         if not res.scalars().first():
             usuario = Usuario(
-                nome=conta["nome"],
-                email=conta["email"],
-                senha_hash=await async_get_password_hash(conta["senha"]),
-                papel=conta["papel"],
+                nome=conta['nome'],
+                email=conta['email'],
+                senha_hash=await async_get_password_hash(conta['senha']),
+                papel=conta['papel'],
             )
             db.add(usuario)
 
@@ -314,29 +353,29 @@ async def _seed_contatos(db: _AsyncSession):
         now = datetime.now(_tz.utc)
         contatos_iniciais = [
             Contato(
-                id="c1b50eb1-e283-4a11-8fa1-b65a440401b3",
-                nome="Portaria Principal",
-                telefone="(14) 3811-1500",
-                email="portaria@hcfmb.unesp.br",
-                tipo_numero="publico",
+                id='c1b50eb1-e283-4a11-8fa1-b65a440401b3',
+                nome='Portaria Principal',
+                telefone='(14) 3811-1500',
+                email='portaria@hcfmb.unesp.br',
+                tipo_numero='publico',
                 atualizado_em=now,
                 excluido=False,
             ),
             Contato(
-                id="f90d1f88-124b-4b13-8cfb-5a1e2f4cb1f4",
-                nome="Pronto Socorro - Recepção",
-                telefone="(14) 3811-1600",
-                email="ps@hcfmb.unesp.br",
-                tipo_numero="institucional",
+                id='f90d1f88-124b-4b13-8cfb-5a1e2f4cb1f4',
+                nome='Pronto Socorro - Recepção',
+                telefone='(14) 3811-1600',
+                email='ps@hcfmb.unesp.br',
+                tipo_numero='institucional',
                 atualizado_em=now,
                 excluido=False,
             ),
             Contato(
-                id="d56e7f88-234b-4c13-8dfb-6a2e3f4cb1f5",
-                nome="Ambulatório de Especialidades",
-                telefone="(14) 3811-1700",
-                email="ambulatorio@hcfmb.unesp.br",
-                tipo_numero="institucional",
+                id='d56e7f88-234b-4c13-8dfb-6a2e3f4cb1f5',
+                nome='Ambulatório de Especialidades',
+                telefone='(14) 3811-1700',
+                email='ambulatorio@hcfmb.unesp.br',
+                tipo_numero='institucional',
                 atualizado_em=now,
                 excluido=False,
             ),
