@@ -11,8 +11,6 @@ Consolida o conteúdo de:
 
 from __future__ import annotations
 
-import datetime
-
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
@@ -116,8 +114,8 @@ class ContatoUpdate(BaseModel):
 
 class ContatoResponse(ContatoBase):
     id: UUID
-    criado_em: Optional[datetime.datetime] = None
-    atualizado_em: datetime.datetime
+    criado_em: Optional[datetime] = None
+    atualizado_em: datetime
     excluido: bool = False
 
     model_config = ConfigDict(from_attributes=True)

@@ -12,7 +12,8 @@ dependencies = [
     "sqlalchemy (>=2.0.51,<3.0.0)",
     "python-jose (>=3.5.0,<4.0.0)",
     "bcrypt (>=5.0.0,<6.0.0)",
-    "alembic (>=1.18.5,<2.0.0)"
+    "alembic (>=1.18.5,<2.0.0)",
+    "aiosqlite (>=0.20.0,<1.0.0)"
 ]
 
 [tool.poetry]
@@ -26,12 +27,12 @@ build-backend = "poetry.core.masonry.api"
 [dependency-groups]
 dev = [
     "pytest (>=9.1.1,<10.0.0)",
+    "pytest-asyncio (>=0.25.0,<1.0.0)",
     "pytest-cov (>=7.1.0,<8.0.0)",
     "ruff (>=0.15.22,<0.16.0)",
     "typos (>=1.48.0,<2.0.0)",
     "taskipy (>=1.14.1,<2.0.0)"
 ]
-
 
 
 [tool.ruff]
@@ -43,6 +44,7 @@ extend-exclude = ['migrations', '*.md']
 [tool.ruff.lint]
 preview = true
 select = ['I', 'F', 'E', 'W', 'PL', 'PT']
+ignore = ['E501', 'PLC0415', 'PLR2004', 'PLR0913', 'PLR0917', 'PLR6301', 'PT015']
 
 
 [tool.ruff.format]
@@ -51,7 +53,7 @@ quote-style = 'single'
 
 [tool.pytest]
 pythonpath = ['.']
-addopts = ['-p', 'no:warnings', '--cov=lista_backend', '--cov-context=test']
+addopts = ['-p', 'no:warnings', '--cov=app', '--cov-context=test']
 
 [tool.taskipy.tasks]
 pre_lint = 'typos'
@@ -60,5 +62,5 @@ pre_format = 'ruff check --fix'
 format = 'ruff format'
 run = 'fastapi dev app/main:app'
 pre_test = 'task lint'
-test = 'pytest -s -x --cov=lista_backend -vv'
+test = 'pytest -s -x --cov=app -vv'
 post_test = 'coverage html --show-contexts'

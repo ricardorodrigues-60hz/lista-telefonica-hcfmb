@@ -40,9 +40,6 @@ from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession
 from sqlalchemy.future import select as _select
 from sqlalchemy.orm import DeclarativeBase
 
-from app.modules.contatos import Contato
-from app.modules.usuarios import Usuario
-
 
 class Settings(BaseSettings):
     """Application settings."""
@@ -146,7 +143,7 @@ class AppError(Exception):
         super().__init__(self.detail)
 
 
-class CredenciaisInvalidatesError(AppError):
+class CredenciaisInvalidasError(AppError):
     status_code = HTTPStatus.UNAUTHORIZED
     detail = 'E-mail ou senha inválidos.'
 
@@ -326,6 +323,7 @@ async def inicializar_banco():
 
 
 async def _seed_usuarios(db: _AsyncSession):
+    from app.modules.usuarios import Usuario
 
     for conta in CONTAS_SEED:
         res = await db.execute(
@@ -342,6 +340,7 @@ async def _seed_usuarios(db: _AsyncSession):
 
 
 async def _seed_contatos(db: _AsyncSession):
+    from app.modules.contatos import Contato
 
     res = await db.execute(_select(Contato))
     if not res.scalars().first():
