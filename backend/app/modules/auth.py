@@ -45,8 +45,7 @@ def _novo_uuid() -> str:
 
 
 class RefreshToken(Base):
-    """Sessões de refresh token persistidas
-    """
+    """Sessões de refresh token persistidas"""
 
     __tablename__ = 'refresh_tokens'
 
@@ -81,13 +80,11 @@ class RefreshToken(Base):
 
 
 class LoginRequest(BaseModel):
-
     login: EmailStr = Field(..., description='E-mail funcional do usuário')
     senha: str = Field(..., min_length=1)
 
 
 class TokenResponse(BaseModel):
-
     access_token: str
     refresh_token: str
     token_type: str = 'bearer'
@@ -185,7 +182,6 @@ class RefreshTokenRepository:
 
 
 class AuthService:
-
     def __init__(self, db: AsyncSession):
         self.db = db
         # UsuarioRepository é importado no nível do módulo (logo abaixo de require_consultor)

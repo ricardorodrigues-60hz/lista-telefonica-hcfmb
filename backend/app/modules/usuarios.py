@@ -251,7 +251,8 @@ def _build_router() -> APIRouter:
         encontrado = await repo.buscar_por_id(usuario_id)
         if not encontrado or encontrado.excluido:
             raise HTTPException(
-                status_code=HTTPStatus.NOT_FOUND, detail='Usuário não encontrado.'
+                status_code=HTTPStatus.NOT_FOUND,
+                detail='Usuário não encontrado.',
             )
         return UsuarioResponse.model_validate(encontrado)
 
@@ -268,7 +269,8 @@ def _build_router() -> APIRouter:
         repo = UsuarioRepository(db)
         if await repo.buscar_por_email(payload.email):
             raise HTTPException(
-                status_code=HTTPStatus.BAD_REQUEST, detail='Já existe um usuário com este e-mail.'
+                status_code=HTTPStatus.BAD_REQUEST,
+                detail='Já existe um usuário com este e-mail.',
             )
 
         novo = await repo.criar(
@@ -292,7 +294,8 @@ def _build_router() -> APIRouter:
         encontrado = await repo.buscar_por_id(usuario_id)
         if not encontrado or encontrado.excluido:
             raise HTTPException(
-                status_code=HTTPStatus.NOT_FOUND, detail='Usuário não encontrado.'
+                status_code=HTTPStatus.NOT_FOUND,
+                detail='Usuário não encontrado.',
             )
 
         atualizado = await repo.atualizar(
@@ -315,7 +318,8 @@ def _build_router() -> APIRouter:
         encontrado = await repo.buscar_por_id(usuario_id)
         if not encontrado or encontrado.excluido:
             raise HTTPException(
-                status_code=HTTPStatus.NOT_FOUND, detail='Usuário não encontrado.'
+                status_code=HTTPStatus.NOT_FOUND,
+                detail='Usuário não encontrado.',
             )
 
         if encontrado.id == usuario.id:

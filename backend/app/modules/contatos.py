@@ -43,9 +43,7 @@ class AuditTrail(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     usuario_nome: Mapped[str] = mapped_column(String, nullable=False)
-    acao: Mapped[str] = mapped_column(
-        String, nullable=False
-    )
+    acao: Mapped[str] = mapped_column(String, nullable=False)
     tabela: Mapped[str] = mapped_column(
         String, nullable=False, default='contatos'
     )
@@ -65,15 +63,11 @@ class AuditTrail(Base):
 class Contato(Base):
     __tablename__ = 'contatos'
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, index=True
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, index=True)
     nome: Mapped[str] = mapped_column(String, nullable=False, index=True)
     telefone: Mapped[str] = mapped_column(String(50), nullable=False)
     email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    tipo_numero: Mapped[str] = mapped_column(
-        String, nullable=False
-    )
+    tipo_numero: Mapped[str] = mapped_column(String, nullable=False)
 
     criado_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

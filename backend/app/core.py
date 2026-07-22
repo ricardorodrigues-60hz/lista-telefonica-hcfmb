@@ -134,7 +134,6 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 class AppError(Exception):
-
     status_code: int = HTTPStatus.BAD_REQUEST
     detail: str = 'Error inesperado.'
 
