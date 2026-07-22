@@ -47,7 +47,7 @@ class AuditTrail(Base):
     usuario_nome: Mapped[str] = mapped_column(String, nullable=False)
     acao: Mapped[str] = mapped_column(
         String, nullable=False
-    ) 
+    )
     tabela: Mapped[str] = mapped_column(
         String, nullable=False, default='contatos'
     )
@@ -55,7 +55,7 @@ class AuditTrail(Base):
     detalhes: Mapped[str] = mapped_column(String, nullable=False)
     dados_modificados: Mapped[Optional[str]] = mapped_column(
         String, nullable=True
-    )  
+    )
 
     # Gravado nativamente pelo banco de dados no momento do INSERT
     criado_em: Mapped[datetime] = mapped_column(
@@ -69,13 +69,13 @@ class Contato(Base):
 
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, index=True
-    )  
+    )
     nome: Mapped[str] = mapped_column(String, nullable=False, index=True)
     telefone: Mapped[str] = mapped_column(String(50), nullable=False)
     email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     tipo_numero: Mapped[str] = mapped_column(
         String, nullable=False
-    )  
+    )
 
     criado_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -394,7 +394,6 @@ router = APIRouter(tags=['Contatos'])
 
 def _build_router() -> APIRouter:
     from app.modules.auth import require_consultor, require_gestor
-
 
     @router.get('/', response_model=List[ContatoResponse])
     async def get_contatos(

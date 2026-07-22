@@ -13,10 +13,10 @@ Consolida o conteúdo de:
 
 import uuid
 from datetime import datetime, timezone
+from http import HTTPStatus
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from http import HTTPStatus
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import Boolean, DateTime, String, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -227,9 +227,10 @@ class UsuarioRepository:
 
 router = APIRouter(tags=['Usuários'])
 
+
 # Redefine a rota /me com a dependência correta após o módulo auth ser carregado
 def _build_router() -> APIRouter:
-    from app.modules.auth import get_current_user, require_gestor
+    from app.modules.auth import require_gestor
 
     @router.get('/', response_model=List[UsuarioResponse])
     async def listar_usuarios(

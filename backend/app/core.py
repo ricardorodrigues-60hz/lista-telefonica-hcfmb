@@ -12,7 +12,6 @@ Consolida o conteúdo de:
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-
 import asyncio
 import hashlib
 import importlib.util
@@ -23,8 +22,8 @@ import uuid
 import warnings
 from datetime import datetime, timedelta, timezone
 from datetime import timezone as _tz
-from typing import AsyncGenerator, Optional
 from http import HTTPStatus
+from typing import AsyncGenerator, Optional
 
 import bcrypt
 from fastapi import FastAPI, HTTPException, Request, status
@@ -40,6 +39,9 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession
 from sqlalchemy.future import select as _select
 from sqlalchemy.orm import DeclarativeBase
+
+from app.modules.contatos import Contato
+from app.modules.usuarios import Usuario
 
 
 class Settings(BaseSettings):
@@ -66,7 +68,6 @@ settings = Settings()
 
 
 def configure_logging(level: int = logging.INFO) -> None:
-    """Configura o logging raiz da aplicação (idempotente)."""
     root = logging.getLogger()
     if root.handlers:
         root.setLevel(level)
@@ -98,7 +99,8 @@ def _choose_database_url(url: str | None) -> str:
         and importlib.util.find_spec('asyncpg') is None
     ):
         warnings.warn(
-            'asyncpg not installed; falling back to in-memory sqlite+aiosqlite for tests',
+            'asyncpg not installed;'
+            ' falling back to in-memory sqlite+aiosqlite for tests',
             RuntimeWarning,
         )
         return 'sqlite+aiosqlite:///:memory:'
@@ -135,7 +137,6 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 class AppError(Exception):
-    """Base para todas as exceções de domínio da aplicação."""
 
     status_code: int = HTTPStatus.BAD_REQUEST
     detail: str = 'Error inesperado.'
@@ -177,7 +178,6 @@ class RegraDeNegocioError(AppError):
 
 
 def register_exception_handlers(app: FastAPI) -> None:
-    """Registra os handlers que convertem ``AppError`` em respostas HTTP."""
 
     @app.exception_handler(AppError)
     async def _handle_app_error(_: Request, exc: AppError) -> JSONResponse:
@@ -296,8 +296,8 @@ async def async_verify_password(
 # ---------------------------------------------------------------------------
 
 
-# Contas padrão de demonstração/desenvolvimento.
-# ATENÇÃO: altere (ou desative via RUN_SEEDS=0) essas senhas antes de qualquer deploy em produção.
+# Contas padrão de desenvolvimento.
+# ATENÇÃO: desative essas senhas antes de qualquer deploy em produção.
 CONTAS_SEED = [
     {
         'nome': 'Gestor HCFMB',
@@ -326,8 +326,6 @@ async def inicializar_banco():
 
 
 async def _seed_usuarios(db: _AsyncSession):
-    # Importação tardia para evitar ciclo de imports na inicialização
-    from app.modules.usuarios import Usuario
 
     for conta in CONTAS_SEED:
         res = await db.execute(
@@ -344,8 +342,6 @@ async def _seed_usuarios(db: _AsyncSession):
 
 
 async def _seed_contatos(db: _AsyncSession):
-    # Importação tardia para evitar ciclo de imports na inicialização
-    from app.modules.contatos import Contato
 
     res = await db.execute(_select(Contato))
     if not res.scalars().first():
@@ -384,5 +380,4 @@ async def _seed_contatos(db: _AsyncSession):
 
 
 async def seeds():
-    """Compatibility wrapper expected by app.main; initializes DB and seeds data."""
     await inicializar_banco()

@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core import configure_logging, register_exception_handlers
+from app.core import configure_logging, register_exception_handlers, seeds
 from app.modules.auth import router as auth_router
 from app.modules.contatos import router as contatos_router
 from app.modules.sync import router as sync_router
@@ -21,8 +21,6 @@ configure_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Importação lazy para evitar efeitos colaterais em tempo de importação (útil em testes)
-    from app.core import seeds
 
     # Only run seeds when explicitly enabled (useful to skip in tests/CI)
     if os.getenv('RUN_SEEDS', '0') == '1':
@@ -33,7 +31,7 @@ async def lifespan(app: FastAPI):
                 'seeds() failed during startup; continuing without seeding'
             )
 
-    yield  # Continua com a execução da aplicação
+    yield
 
 
 app = FastAPI(title='Aciono Você API', version='1.0.0', lifespan=lifespan)
@@ -45,7 +43,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         '*'
-    ],  # Em produção, especifique os domínios permitidos para maior segurança
+    ],
     allow_credentials=True,
     allow_methods=['*'],
     allow_headers=['*'],

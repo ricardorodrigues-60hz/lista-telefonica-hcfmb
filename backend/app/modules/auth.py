@@ -45,10 +45,7 @@ def _novo_uuid() -> str:
 
 
 class RefreshToken(Base):
-    """Sessões de refresh token persistidas para permitir rotação e revogação real.
-
-    Nunca armazenamos o JWT em texto puro: apenas o hash (SHA-256) do token,
-    de modo que um dump do banco não permita reutilizar sessões.
+    """Sessões de refresh token persistidas
     """
 
     __tablename__ = 'refresh_tokens'
@@ -84,14 +81,12 @@ class RefreshToken(Base):
 
 
 class LoginRequest(BaseModel):
-    """Credenciais de login: e-mail funcional + senha."""
 
     login: EmailStr = Field(..., description='E-mail funcional do usuário')
     senha: str = Field(..., min_length=1)
 
 
 class TokenResponse(BaseModel):
-    """Par de tokens JWT retornado por /auth/login e /auth/refresh."""
 
     access_token: str
     refresh_token: str
@@ -178,7 +173,7 @@ class RefreshTokenRepository:
     async def rotacionar(
         self, registro_antigo: RefreshToken, novo_registro_id: str
     ) -> None:
-        """Marca o token antigo como revogado e aponta para o novo (cadeia de rotação)."""
+
         registro_antigo.revogado = True
         registro_antigo.substituido_por_id = novo_registro_id
         await self.db.commit()
@@ -190,7 +185,6 @@ class RefreshTokenRepository:
 
 
 class AuthService:
-    """Orquestra login, emissão/rotação de tokens e logout."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -202,7 +196,7 @@ class AuthService:
     async def _emitir_par_de_tokens(
         self, usuario
     ) -> tuple[TokenResponse, RefreshToken]:
-        """Gera e persiste um novo par access/refresh token para o usuário informado."""
+
         access_token = create_access_token(usuario.id, usuario.papel)
         refresh_token_bruto, expira_em = create_refresh_token(usuario.id)
 
@@ -220,7 +214,7 @@ class AuthService:
         return resposta, registro
 
     async def login(self, login: str, senha: str) -> TokenResponse:
-        """Autentica um usuário por e-mail + senha e emite access/refresh tokens."""
+
         usuario = await self.usuarios.buscar_por_email(login)
 
         if not usuario or usuario.excluido:
@@ -233,7 +227,7 @@ class AuthService:
         return resposta
 
     async def refresh(self, refresh_token: str) -> TokenResponse:
-        """Rotaciona o refresh token: o token apresentado é invalidado e um novo par é emitido."""
+
         token_payload = decode_token(refresh_token)
         usuario_id = token_payload.get('sub')
         if usuario_id is None or token_payload.get('refresh') is not True:
@@ -262,7 +256,7 @@ class AuthService:
         return nova_resposta
 
     async def logout(self, refresh_token: str) -> None:
-        """Revoga o refresh token informado, encerrando a sessão correspondente."""
+
         await self.refresh_tokens.revogar_por_token(
             hash_refresh_token(refresh_token)
         )
@@ -275,7 +269,7 @@ async def get_current_user(
     token: Optional[str] = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ):
-    """Resolve o usuário autenticado a partir de um access token JWT."""
+
     if not token:
         raise NaoAutenticadoError()
 
@@ -302,7 +296,6 @@ async def get_current_user(
 
 
 def require_roles(*papeis: str):
-    """Factory de dependência para restringir um endpoint a papéis específicos (RBAC)."""
 
     async def dependency(usuario=Depends(get_current_user)):
         if usuario.papel not in papeis:
@@ -335,7 +328,7 @@ async def login(
     payload: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Autentica um usuário por e-mail + senha e emite access/refresh tokens."""
+
     service = AuthService(db)
     return await service.login(payload.login, payload.senha)
 
@@ -345,7 +338,7 @@ async def refresh_token_route(
     payload: RefreshRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Rotaciona o refresh token, emitindo um novo par access/refresh."""
+
     service = AuthService(db)
     return await service.refresh(payload.refresh_token)
 
@@ -355,6 +348,6 @@ async def logout(
     payload: LogoutRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Revoga o refresh token informado, encerrando a sessão correspondente."""
+
     service = AuthService(db)
     await service.logout(payload.refresh_token)

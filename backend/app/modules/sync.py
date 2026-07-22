@@ -156,7 +156,7 @@ def _build_router() -> APIRouter:
         service = SyncService(db)
         return await service.sincronizar(payload, usuario.email)
 
-    return router   
+    return router
 
 
 router = _build_router()

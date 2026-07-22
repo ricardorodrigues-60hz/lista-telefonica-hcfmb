@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
+from http import HTTPStatus
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from http import HTTPStatus
 
 from app.main import app
 
