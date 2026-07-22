@@ -144,9 +144,9 @@ class SyncService:
 def _build_router() -> APIRouter:
     from app.modules.auth import require_consultor
 
-    r = APIRouter(tags=['Sincronização'])
+    router = APIRouter(tags=['Sincronização'])
 
-    @r.post('', response_model=SyncResponse)
+    @router.post('', response_model=SyncResponse)
     async def sync_contatos(
         payload: SyncPayload,
         usuario=Depends(require_consultor),
@@ -156,7 +156,7 @@ def _build_router() -> APIRouter:
         service = SyncService(db)
         return await service.sincronizar(payload, usuario.email)
 
-    return r
+    return router   
 
 
 router = _build_router()

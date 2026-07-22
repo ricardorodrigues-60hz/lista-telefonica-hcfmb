@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from http import HTTPStatus
 
 from app.main import app
 
@@ -133,7 +134,7 @@ async def test_login_sucesso(monkeypatch):
             json={'login': 'gestor@hcfmb.unesp.br', 'senha': SENHA_CORRETA},
         )
 
-    assert r.status_code == 200
+    assert r.status_code == HTTPStatus.OK
     data = r.json()
     assert 'access_token' in data
     assert 'refresh_token' in data
@@ -154,7 +155,7 @@ async def test_login_senha_incorreta(monkeypatch):
             json={'login': 'gestor@hcfmb.unesp.br', 'senha': 'senha-errada'},
         )
 
-    assert r.status_code == 401
+    assert r.status_code == HTTPStatus.UNAUTHORIZED
 
 
 @pytest.mark.asyncio
@@ -170,7 +171,7 @@ async def test_login_usuario_inexistente(monkeypatch):
             json={'login': 'ninguem@hcfmb.unesp.br', 'senha': SENHA_CORRETA},
         )
 
-    assert r.status_code == 401
+    assert r.status_code == HTTPStatus.UNAUTHORIZED
 
 
 @pytest.mark.asyncio
@@ -187,7 +188,7 @@ async def test_login_usuario_excluido(monkeypatch):
             json={'login': usuario.email, 'senha': SENHA_CORRETA},
         )
 
-    assert r.status_code == 401
+    assert r.status_code == HTTPStatus.UNAUTHORIZED
 
 
 @pytest.mark.asyncio
@@ -202,13 +203,13 @@ async def test_refresh_gera_novo_par_e_rotaciona_o_antigo(monkeypatch):
             '/api/auth/login',
             json={'login': 'gestor@hcfmb.unesp.br', 'senha': SENHA_CORRETA},
         )
-        assert r.status_code == 200
+        assert r.status_code == HTTPStatus.OK
         refresh_original = r.json()['refresh_token']
 
         r2 = await ac.post(
             '/api/auth/refresh', json={'refresh_token': refresh_original}
         )
-        assert r2.status_code == 200
+        assert r2.status_code == HTTPStatus.OK
         d2 = r2.json()
         assert 'access_token' in d2
         assert 'refresh_token' in d2
@@ -218,7 +219,7 @@ async def test_refresh_gera_novo_par_e_rotaciona_o_antigo(monkeypatch):
         r3 = await ac.post(
             '/api/auth/refresh', json={'refresh_token': refresh_original}
         )
-        assert r3.status_code == 401
+        assert r3.status_code == HTTPStatus.UNAUTHORIZED
 
 
 @pytest.mark.asyncio
@@ -238,19 +239,19 @@ async def test_reuso_de_refresh_token_revoga_todas_as_sessoes(monkeypatch):
         r2 = await ac.post(
             '/api/auth/refresh', json={'refresh_token': refresh_original}
         )
-        assert r2.status_code == 200
+        assert r2.status_code == HTTPStatus.OK
         refresh_novo = r2.json()['refresh_token']
 
         # Reapresentar o token antigo (já rotacionado) deve revogar a sessão nova também.
         r3 = await ac.post(
             '/api/auth/refresh', json={'refresh_token': refresh_original}
         )
-        assert r3.status_code == 401
+        assert r3.status_code == HTTPStatus.UNAUTHORIZED
 
         r4 = await ac.post(
             '/api/auth/refresh', json={'refresh_token': refresh_novo}
         )
-        assert r4.status_code == 401
+        assert r4.status_code == HTTPStatus.UNAUTHORIZED
 
 
 @pytest.mark.asyncio
@@ -270,9 +271,9 @@ async def test_logout_revoga_refresh_token(monkeypatch):
         r_logout = await ac.post(
             '/api/auth/logout', json={'refresh_token': refresh_token}
         )
-        assert r_logout.status_code == 204
+        assert r_logout.status_code == HTTPStatus.NO_CONTENT
 
         r_refresh = await ac.post(
             '/api/auth/refresh', json={'refresh_token': refresh_token}
         )
-        assert r_refresh.status_code == 401
+        assert r_refresh.status_code == HTTPStatus.UNAUTHORIZED

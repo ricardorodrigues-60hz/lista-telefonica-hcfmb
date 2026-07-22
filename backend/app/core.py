@@ -24,6 +24,7 @@ import warnings
 from datetime import datetime, timedelta, timezone
 from datetime import timezone as _tz
 from typing import AsyncGenerator, Optional
+from http import HTTPStatus
 
 import bcrypt
 from fastapi import FastAPI, HTTPException, Request, status
@@ -44,8 +45,6 @@ from sqlalchemy.orm import DeclarativeBase
 class Settings(BaseSettings):
     """Application settings."""
 
-    # O Pydantic valida e tipa automaticamente as variáveis de ambiente,
-    # garantindo que sejam do tipo correto e estejam presentes quando necessário.
     DATABASE_URL: str = 'sqlite+aiosqlite:///:memory:'
     SECRET_KEY: str = 'super-secret-key-padrao-caso-nao-exista-no-env'
     ALGORITHM: str = 'HS256'
@@ -138,43 +137,43 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 class AppError(Exception):
     """Base para todas as exceções de domínio da aplicação."""
 
-    status_code: int = status.HTTP_400_BAD_REQUEST
-    detail: str = 'Erro inesperado.'
+    status_code: int = HTTPStatus.BAD_REQUEST
+    detail: str = 'Error inesperado.'
 
     def __init__(self, detail: str | None = None):
         self.detail = detail or self.detail
         super().__init__(self.detail)
 
 
-class CredenciaisInvalidasError(AppError):
-    status_code = status.HTTP_401_UNAUTHORIZED
+class CredenciaisInvalidatesError(AppError):
+    status_code = HTTPStatus.UNAUTHORIZED
     detail = 'E-mail ou senha inválidos.'
 
 
 class TokenInvalidoError(AppError):
-    status_code = status.HTTP_401_UNAUTHORIZED
+    status_code = HTTPStatus.UNAUTHORIZED
     detail = 'Refresh token inválido, revogado ou expirado.'
 
 
 class NaoAutenticadoError(AppError):
-    status_code = status.HTTP_401_UNAUTHORIZED
+    status_code = HTTPStatus.UNAUTHORIZED
     detail = 'Could not validate credentials'
 
 
 class PermissaoNegadaError(AppError):
-    status_code = status.HTTP_403_FORBIDDEN
+    status_code = HTTPStatus.FORBIDDEN
     detail = 'Operação não permitida para o seu papel.'
 
 
 class RegistroNaoEncontradoError(AppError):
-    status_code = status.HTTP_404_NOT_FOUND
+    status_code = HTTPStatus.NOT_FOUND
     detail = 'Registro não encontrado.'
 
 
 class RegraDeNegocioError(AppError):
     """Violação de uma regra de negócio (ex.: e-mail duplicado)."""
 
-    status_code = status.HTTP_400_BAD_REQUEST
+    status_code = HTTPStatus.BAD_REQUEST
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -184,7 +183,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def _handle_app_error(_: Request, exc: AppError) -> JSONResponse:
         headers = (
             {'WWW-Authenticate': 'Bearer'}
-            if exc.status_code == status.HTTP_401_UNAUTHORIZED
+            if exc.status_code == HTTPStatus.UNAUTHORIZED
             else None
         )
         return JSONResponse(

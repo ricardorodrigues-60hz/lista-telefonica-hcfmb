@@ -47,7 +47,7 @@ class AuditTrail(Base):
     usuario_nome: Mapped[str] = mapped_column(String, nullable=False)
     acao: Mapped[str] = mapped_column(
         String, nullable=False
-    )  # "CRIAR", "EDITAR", "EXCLUIR"...
+    ) 
     tabela: Mapped[str] = mapped_column(
         String, nullable=False, default='contatos'
     )
@@ -55,7 +55,7 @@ class AuditTrail(Base):
     detalhes: Mapped[str] = mapped_column(String, nullable=False)
     dados_modificados: Mapped[Optional[str]] = mapped_column(
         String, nullable=True
-    )  # JSON serializado
+    )  
 
     # Gravado nativamente pelo banco de dados no momento do INSERT
     criado_em: Mapped[datetime] = mapped_column(
@@ -69,13 +69,13 @@ class Contato(Base):
 
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, index=True
-    )  # UUID
+    )  
     nome: Mapped[str] = mapped_column(String, nullable=False, index=True)
     telefone: Mapped[str] = mapped_column(String(50), nullable=False)
     email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     tipo_numero: Mapped[str] = mapped_column(
         String, nullable=False
-    )  # "institucional" ou "publico"
+    )  
 
     criado_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -250,7 +250,6 @@ class ContatoRepository:
     async def atualizar(
         self, contato_id: UUID, contato_in: ContatoBase, usuario_nome: str
     ) -> Optional[Contato]:
-        """Atualiza o contato existente identificado por `contato_id` (fluxo online)."""
         contato = await self.buscar_por_id(str(contato_id))
         if not contato:
             return None
@@ -283,7 +282,6 @@ class ContatoRepository:
         return contato
 
     async def deletar_soft(self, contato_id: str, usuario_nome: str) -> bool:
-        """Exclusão lógica (soft delete) de um contato."""
         contato = await self.buscar_por_id(contato_id)
         if not contato:
             return False
@@ -397,9 +395,8 @@ router = APIRouter(tags=['Contatos'])
 def _build_router() -> APIRouter:
     from app.modules.auth import require_consultor, require_gestor
 
-    r = APIRouter(tags=['Contatos'])
 
-    @r.get('/', response_model=List[ContatoResponse])
+    @router.get('/', response_model=List[ContatoResponse])
     async def get_contatos(
         usuario=Depends(require_consultor),
         db: AsyncSession = Depends(get_db),
@@ -408,7 +405,7 @@ def _build_router() -> APIRouter:
         repo = ContatoRepository(db)
         return await repo.listar_ativos()
 
-    @r.post(
+    @router.post(
         '/{contato_id}',
         response_model=ContatoResponse,
         status_code=status.HTTP_201_CREATED,
@@ -431,14 +428,13 @@ def _build_router() -> APIRouter:
                 status_code=status.HTTP_409_CONFLICT, detail=str(exc)
             )
 
-    @r.put('/{contato_id}', response_model=ContatoResponse)
+    @router.put('/{contato_id}', response_model=ContatoResponse)
     async def update_contato(
         contato_id: UUID,
         payload: ContatoBase,
         usuario=Depends(require_gestor),
         db: AsyncSession = Depends(get_db),
     ):
-        """Atualiza o contato identificado por `contato_id`. Restrito a GESTOR."""
         repo = ContatoRepository(db)
         contato = await repo.atualizar(contato_id, payload, usuario.email)
         if not contato:
@@ -448,7 +444,7 @@ def _build_router() -> APIRouter:
             )
         return contato
 
-    @r.delete('/{contato_id}', status_code=status.HTTP_204_NO_CONTENT)
+    @router.delete('/{contato_id}', status_code=status.HTTP_204_NO_CONTENT)
     async def deletar_contato(
         contato_id: UUID,
         usuario=Depends(require_gestor),
@@ -462,7 +458,7 @@ def _build_router() -> APIRouter:
                 status_code=404, detail='Contato não encontrado.'
             )
 
-    return r
+    return router
 
 
 router = _build_router()

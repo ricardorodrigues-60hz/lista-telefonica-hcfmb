@@ -8,7 +8,8 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.11,<4.0"
 dependencies = [
-    "fastapi[standard] (>=0.139.2,<0.140.0)"
+    "fastapi[standard] (>=0.139.2,<0.140.0)",
+    "sqlalchemy (>=2.0.51,<3.0.0)"
 ]
 
 [tool.poetry]
@@ -34,12 +35,12 @@ dev = [
 line-length = 79
 extend-exclude = ['migrations', '*.md']
 
+
+
 [tool.ruff.lint]
 preview = true
 select = ['I', 'F', 'E', 'W', 'PL', 'PT']
-ignore = [
-    "ERA001", # found-commented-out-code (Evita que o Ruff ache que português é código quebrado)
-]
+
 
 [tool.ruff.format]
 preview = true
@@ -54,7 +55,7 @@ pre_lint = 'typos'
 lint = 'ruff check'
 pre_format = 'ruff check --fix'
 format = 'ruff format'
-run = 'fastapi dev app/main.py'
+run = 'fastapi dev app/main:app'
 pre_test = 'task lint'
 test = 'pytest -s -x --cov=lista_backend -vv'
 post_test = 'coverage html --show-contexts'

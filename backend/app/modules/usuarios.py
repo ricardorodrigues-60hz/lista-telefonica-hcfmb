@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from http import HTTPStatus
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import Boolean, DateTime, String, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -71,7 +72,7 @@ PapelUsuario = Literal['GESTOR', 'CONSULTOR']
 class UsuarioBase(BaseModel):
     """Base fields shared by user schemas."""
 
-    nome: str = Field(..., min_length=2, max_length=255)
+    nome: str
     email: EmailStr
     papel: PapelUsuario
 
@@ -85,7 +86,7 @@ class UsuarioCreate(UsuarioBase):
 class UsuarioUpdate(BaseModel):
     """Payload para o GESTOR atualizar um usuário existente. Todos os campos são opcionais."""
 
-    nome: Optional[str] = Field(default=None, min_length=2, max_length=255)
+    nome: Optional[str]
     papel: Optional[PapelUsuario] = None
     senha: Optional[str] = Field(default=None, min_length=6, max_length=72)
 
@@ -226,65 +227,47 @@ class UsuarioRepository:
 
 router = APIRouter(tags=['Usuários'])
 
-
-@router.get('/me', response_model=UsuarioResponse)
-async def obter_perfil(usuario: Usuario = Depends(lambda: None)):
-    """Retorna os dados do próprio usuário autenticado."""
-    # A dependência real é injetada abaixo após a importação de auth
-    return UsuarioResponse.model_validate(usuario)
-
-
 # Redefine a rota /me com a dependência correta após o módulo auth ser carregado
 def _build_router() -> APIRouter:
     from app.modules.auth import get_current_user, require_gestor
 
-    r = APIRouter(tags=['Usuários'])
-
-    @r.get('/me', response_model=UsuarioResponse)
-    async def obter_perfil(usuario: Usuario = Depends(get_current_user)):
-        """Retorna os dados do próprio usuário autenticado."""
-        return UsuarioResponse.model_validate(usuario)
-
-    @r.get('/', response_model=List[UsuarioResponse])
+    @router.get('/', response_model=List[UsuarioResponse])
     async def listar_usuarios(
         usuario: Usuario = Depends(require_gestor),
         db: AsyncSession = Depends(get_db),
     ):
-        """Lista todos os usuários ativos. Restrito a GESTOR."""
         repo = UsuarioRepository(db)
         usuarios = await repo.listar_ativos()
         return [UsuarioResponse.model_validate(u) for u in usuarios]
 
-    @r.get('/{usuario_id}', response_model=UsuarioResponse)
+    @router.get('/{usuario_id}', response_model=UsuarioResponse)
     async def obter_usuario(
         usuario_id: str,
         usuario: Usuario = Depends(require_gestor),
         db: AsyncSession = Depends(get_db),
     ):
-        """Obtém um usuário por ID. Restrito a GESTOR."""
         repo = UsuarioRepository(db)
         encontrado = await repo.buscar_por_id(usuario_id)
         if not encontrado or encontrado.excluido:
             raise HTTPException(
-                status_code=404, detail='Usuário não encontrado.'
+                status_code=HTTPStatus.NOT_FOUND, detail='Usuário não encontrado.'
             )
         return UsuarioResponse.model_validate(encontrado)
 
-    @r.post(
+    @router.post(
         '/',
         response_model=UsuarioResponse,
-        status_code=status.HTTP_201_CREATED,
+        status_code=HTTPStatus.CREATED,
     )
     async def criar_usuario(
         payload: UsuarioCreate,
         usuario: Usuario = Depends(require_gestor),
         db: AsyncSession = Depends(get_db),
     ):
-        """Cria um novo usuário (nome, e-mail, senha, papel). Restrito a GESTOR."""
         repo = UsuarioRepository(db)
         if await repo.buscar_por_email(payload.email):
             raise HTTPException(
-                status_code=400, detail='Já existe um usuário com este e-mail.'
+                status_code=HTTPStatus.BAD_REQUEST, detail='Já existe um usuário com este e-mail.'
             )
 
         novo = await repo.criar(
@@ -296,7 +279,7 @@ def _build_router() -> APIRouter:
         )
         return UsuarioResponse.model_validate(novo)
 
-    @r.put('/{usuario_id}', response_model=UsuarioResponse)
+    @router.put('/{usuario_id}', response_model=UsuarioResponse)
     async def atualizar_usuario(
         usuario_id: str,
         payload: UsuarioUpdate,
@@ -308,7 +291,7 @@ def _build_router() -> APIRouter:
         encontrado = await repo.buscar_por_id(usuario_id)
         if not encontrado or encontrado.excluido:
             raise HTTPException(
-                status_code=404, detail='Usuário não encontrado.'
+                status_code=HTTPStatus.NOT_FOUND, detail='Usuário não encontrado.'
             )
 
         atualizado = await repo.atualizar(
@@ -320,7 +303,7 @@ def _build_router() -> APIRouter:
         )
         return UsuarioResponse.model_validate(atualizado)
 
-    @r.delete('/{usuario_id}', status_code=status.HTTP_204_NO_CONTENT)
+    @router.delete('/{usuario_id}', status_code=status.HTTP_204_NO_CONTENT)
     async def excluir_usuario(
         usuario_id: str,
         usuario: Usuario = Depends(require_gestor),
@@ -331,18 +314,18 @@ def _build_router() -> APIRouter:
         encontrado = await repo.buscar_por_id(usuario_id)
         if not encontrado or encontrado.excluido:
             raise HTTPException(
-                status_code=404, detail='Usuário não encontrado.'
+                status_code=HTTPStatus.NOT_FOUND, detail='Usuário não encontrado.'
             )
 
         if encontrado.id == usuario.id:
             raise HTTPException(
-                status_code=400,
+                status_code=HTTPStatus.BAD_REQUEST,
                 detail='Não é possível excluir o próprio usuário autenticado.',
             )
 
         await repo.deletar_soft(encontrado, autor=usuario.email)
 
-    return r
+    return router
 
 
 router = _build_router()
