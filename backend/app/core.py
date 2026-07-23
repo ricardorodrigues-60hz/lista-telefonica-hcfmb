@@ -16,7 +16,6 @@ import asyncio
 import hashlib
 import importlib.util
 import logging
-import os
 import sys
 import uuid
 import warnings
@@ -50,6 +49,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     TOKEN_URL: str = '/api/auth/login'
+    API_PORT: int = 8085
+    API_BASE: str = '/lista-telefonica'
 
     model_config = SettingsConfigDict(
         env_file='.env', env_file_encoding='utf-8', extra='ignore'
@@ -85,9 +86,6 @@ def configure_logging(level: int = logging.INFO) -> None:
 # ---------------------------------------------------------------------------
 
 
-_env_db = os.getenv('DATABASE_URL')
-
-
 def _choose_database_url(url: str | None) -> str:
     if not url:
         return 'sqlite+aiosqlite:///:memory:'
@@ -104,7 +102,7 @@ def _choose_database_url(url: str | None) -> str:
     return url
 
 
-DATABASE_URL = _choose_database_url(_env_db)
+DATABASE_URL = _choose_database_url(settings.DATABASE_URL)
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 
@@ -311,7 +309,11 @@ CONTAS_SEED = [
 
 
 async def inicializar_banco():
-    """Cria as tabelas no banco se não existirem e injeta dados iniciais."""
+
+    from app.modules.auth import RefreshToken  # noqa: F401
+    from app.modules.contatos import AuditTrail, Contato  # noqa: F401
+    from app.modules.usuarios import Usuario  # noqa: F401
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

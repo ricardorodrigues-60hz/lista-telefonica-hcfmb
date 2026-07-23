@@ -13,7 +13,8 @@ dependencies = [
     "python-jose (>=3.5.0,<4.0.0)",
     "bcrypt (>=5.0.0,<6.0.0)",
     "alembic (>=1.18.5,<2.0.0)",
-    "aiosqlite (>=0.20.0,<1.0.0)"
+    "aiosqlite (>=0.20.0,<1.0.0)",
+    "asyncpg (>=0.30.0,<1.0.0)"
 ]
 
 [tool.poetry]
@@ -27,7 +28,7 @@ build-backend = "poetry.core.masonry.api"
 [dependency-groups]
 dev = [
     "pytest (>=9.1.1,<10.0.0)",
-    "pytest-asyncio (>=0.25.0,<1.0.0)",
+    "pytest-asyncio (>=1.4.0,<2.0.0)",
     "pytest-cov (>=7.1.0,<8.0.0)",
     "ruff (>=0.15.22,<0.16.0)",
     "typos (>=1.48.0,<2.0.0)",
@@ -60,7 +61,7 @@ pre_lint = 'typos'
 lint = 'ruff check'
 pre_format = 'ruff check --fix'
 format = 'ruff format'
-run = 'fastapi dev app/main:app'
+run = 'python -X utf8 -m fastapi dev app/main.py'
 pre_test = 'task lint'
 test = 'pytest -s -x --cov=app -vv'
 post_test = 'coverage html --show-contexts'

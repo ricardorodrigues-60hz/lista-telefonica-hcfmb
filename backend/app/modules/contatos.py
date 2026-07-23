@@ -186,7 +186,7 @@ class ContatoRepository:
     async def listar_ativos(self) -> List[Contato]:
         """Lista todos os contatos ativos (não excluídos por soft-delete)."""
         result = await self.db.execute(
-            select(Contato).where(not Contato.excluido)
+            select(Contato).where(Contato.excluido == False)  # noqa: E712
         )
         return list(result.scalars().all())
 

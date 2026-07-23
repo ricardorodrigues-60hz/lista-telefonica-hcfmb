@@ -282,7 +282,7 @@ async def get_current_user(
 
     result = await db.execute(
         _select_usuario(Usuario).where(
-            Usuario.id == usuario_id, not Usuario.excluido
+            Usuario.id == usuario_id, Usuario.excluido == False  # noqa: E712
         )
     )
     usuario = result.scalars().first()

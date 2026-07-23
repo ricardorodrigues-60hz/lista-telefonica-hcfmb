@@ -1,15 +1,30 @@
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: lista_postgres_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: lista_telefonica
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   backend:
     build: ./backend
     container_name: lista_backend_api
     ports:
       - "8085:8085"
     volumes:
-      - ./backend:/app
-      - /app/venv # Ignora o venv local para não chocar com o do container
+      - ./backend/app:/app/app
+      - ./backend/tests:/app/tests
+      - ./backend/migrations:/app/migrations
     environment:
-      - DATABASE_URL=sqlite+aiosqlite:///./lista.db
+      - DATABASE_URL=postgresql+asyncpg://postgres:admin@db:5432/lista_telefonica
       - RUN_SEEDS=1
+    depends_on:
+      - db
 
   frontend:
     build: ./frontend
@@ -24,4 +39,6 @@ services:
       - NEXT_PUBLIC_API_URL=http://localhost:8085
     depends_on:
       - backend
-      
+
+volumes:
+  postgres_data:

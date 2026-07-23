@@ -124,7 +124,7 @@ class UsuarioRepository:
 
     async def listar_ativos(self) -> List[Usuario]:
         result = await self.db.execute(
-            select(Usuario).where(not Usuario.excluido)
+            select(Usuario).where(Usuario.excluido == False)  # noqa: E712
         )
         return list(result.scalars().all())
 

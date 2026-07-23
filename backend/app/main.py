@@ -22,8 +22,8 @@ configure_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
 
-    # Only run seeds when explicitly enabled (useful to skip in tests/CI)
-    if os.getenv('RUN_SEEDS', '0') == '1':
+    # Run seeds by default unless explicitly disabled (RUN_SEEDS=0)
+    if os.getenv('RUN_SEEDS', '1') == '1':
         try:
             await seeds()
         except Exception:
@@ -51,3 +51,9 @@ app.include_router(auth_router, prefix='/api/auth', tags=['Autenticação'])
 app.include_router(usuarios_router, prefix='/api/usuarios', tags=['Usuários'])
 app.include_router(contatos_router, prefix='/api/contatos', tags=['Contatos'])
 app.include_router(sync_router, prefix='/api/sync', tags=['Sincronização'])
+
+
+@app.get('/', tags=['Root'])
+async def read_root():
+    """Rota raiz para verificar se a API está online."""
+    return {'message': 'API Rodando!'}
