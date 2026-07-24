@@ -40,9 +40,9 @@ flowchart LR
 
 A["Frontend (PWA)"]
 
-B["FastAPI"]
+B["FastAPI\n(main.py)"]
 
-C["Camada de Serviços"]
+C["Módulos\n(app/modules/)"]
 
 D["SQLAlchemy Async"]
 
@@ -57,7 +57,7 @@ C --> D
 D --> E
 ```
 
-A aplicação segue uma arquitetura em camadas, separando responsabilidades entre API, regras de negócio e persistência dos dados.
+A aplicação adota uma organização por **módulos verticais**: cada módulo em `app/modules/` concentra em um único arquivo o modelo ORM, os schemas Pydantic, o repository e o router FastAPI correspondentes. O `core.py` centraliza configuração, banco de dados, segurança e tratamento de erros.
 
 ---
 
@@ -81,24 +81,23 @@ A aplicação segue uma arquitetura em camadas, separando responsabilidades entr
 
 ```text
 backend/
-
-├── alembic/
 ├── app/
-│   ├── api/
-│   ├── core/
-│   ├── models/
-│   ├── repositories/
-│   ├── schemas/
-│   ├── services/
-│   └── ...
+│   ├── core.py          # Configuração, banco, segurança e exceções
+│   ├── main.py          # Ponto de entrada FastAPI + registro de routers
+│   ├── seeds_data.py    # Dados iniciais de seed
+│   └── modules/
+│       ├── auth.py      # Modelo RefreshToken, schemas, repository, service e router de autenticação
+│       ├── contatos.py  # Modelos Contato + AuditTrail, schemas, repositories e router de contatos
+│       ├── sync.py      # Schemas, SyncService e router de sincronização offline
+│       └── usuarios.py  # Modelo Usuario, schemas, repository e router de usuários
 │
-├── tests/
-│
+├── migrations/          # Migrações Alembic
+├── tests/               # Testes automatizados (pytest)
 ├── pyproject.toml
 └── README.md
 ```
 
-A organização do projeto busca separar claramente regras de negócio, acesso aos dados, modelos e rotas da API.
+Cada arquivo em `app/modules/` é autossuficiente: reúne modelo ORM, schemas Pydantic, repository e router relativos ao seu domínio.
 
 ---
 
