@@ -1,10 +1,8 @@
-
-
 services:
   # Banco de dados PostgreSQL
   db:
     image: postgres:16-alpine
-    container_name: lista_telefonica_db
+    container_name: lista-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: lista_telefonica
@@ -17,10 +15,10 @@ services:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d lista_telefonica"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 5s
     networks:
       - app_network
 
@@ -29,7 +27,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: lista_telefonica_backend
+    container_name: lista-backend-api
     restart: unless-stopped
     ports:
       - "8085:8085"
@@ -48,25 +46,22 @@ services:
         condition: service_healthy
     networks:
       - app_network
-    volumes:
-      - ./backend/app:/app/app
-      - ./backend/migrations:/app/migrations
     healthcheck:
       test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8085/docs', timeout=2)"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 3
-      start_period: 15s
+      retries: 5
+      start_period: 10s
 
-  # Frontend Next.js
+  # Frontend Next.js PWA
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: lista_telefonica_frontend
+    container_name: lista-frontend-pwa
     restart: unless-stopped
     ports:
-      - "3000:8086"
+      - "8086:8086"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8085
       NODE_ENV: production
@@ -77,10 +72,10 @@ services:
       - app_network
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8086"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 3
-      start_period: 15s
+      retries: 5
+      start_period: 10s
 
 volumes:
   postgres_data:

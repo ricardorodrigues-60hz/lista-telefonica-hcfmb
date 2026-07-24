@@ -81,14 +81,30 @@ export default function Home() {
     }
   }, []);
 
-  // Fetch from server when online & authenticated
-  useEffect(() => {
-    if (token && isOnline) {
-      loadContactsFromServer();
+  async function handleLogout() {
+    // Revoga a sessão no servidor (rotação de refresh token).
+    // Best-effort: se o dispositivo estiver offline, apenas seguimos com a limpeza local.
+    if (refreshToken) {
+      try {
+        await fetch(`${API_BASE}/auth/logout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshToken })
+        });
+      } catch {
+        // Sem conexão ou servidor indisponível: a sessão local é encerrada mesmo assim.
+      }
     }
-  }, [token, isOnline]);
 
-  const loadContactsFromServer = async () => {
+    setToken(null);
+    setRefreshToken(null);
+    setUserRole(null);
+    setUserName('');
+    localStorage.clear();
+    db.contatos.clear(); // Clear cache for security
+  }
+
+  async function loadContactsFromServer() {
     try {
       const res = await fetch(`${API_BASE}/contatos`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -134,10 +150,10 @@ export default function Home() {
     } catch (err) {
       console.error('Error fetching contacts from server:', err);
     }
-  };
+  }
 
   // Sync IndexedDB with remote SQLite
-  const triggerSync = async () => {
+  async function triggerSync() {
     if (!navigator.onLine || !token) return;
     
     setSyncing(true);
@@ -201,66 +217,7 @@ export default function Home() {
     } finally {
       setSyncing(false);
     }
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError('');
-    
-    try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login: loginEmail, senha: loginPassword })
-      });
-      
-      if (res.ok) {
-        const data = await res.json();
-        setToken(data.access_token);
-        setRefreshToken(data.refresh_token);
-        setUserRole(data.papel);
-        setUserName(data.nome);
-        
-        localStorage.setItem('access_token', data.access_token);
-        localStorage.setItem('refresh_token', data.refresh_token);
-        localStorage.setItem('user_role', data.papel);
-        localStorage.setItem('user_name', data.nome);
-      } else {
-        const errData = await res.json();
-        const errorMsg = typeof errData.detail === 'string' 
-          ? errData.detail 
-          : (Array.isArray(errData.detail) && errData.detail.length > 0 && errData.detail[0].msg
-              ? errData.detail[0].msg
-              : 'Falha na autenticação.');
-        setLoginError(errorMsg);
-      }
-    } catch (err) {
-      setLoginError('Não foi possível conectar ao servidor backend.');
-    }
-  };
-
-  const handleLogout = async () => {
-    // Revoga a sessão no servidor (rotação de refresh token).
-    // Best-effort: se o dispositivo estiver offline, apenas seguimos com a limpeza local.
-    if (refreshToken) {
-      try {
-        await fetch(`${API_BASE}/auth/logout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh_token: refreshToken })
-        });
-      } catch (err) {
-        // Sem conexão ou servidor indisponível: a sessão local é encerrada mesmo assim.
-      }
-    }
-
-    setToken(null);
-    setRefreshToken(null);
-    setUserRole(null);
-    setUserName('');
-    localStorage.clear();
-    db.contatos.clear(); // Clear cache for security
-  };
+  }
 
   // CRUD actions
   const openCreateModal = () => {

@@ -2,32 +2,108 @@ name: CI
 
 on:
   push:
-    branches: [ beta-01 ]
   pull_request:
-    branches: [ main, master, beta-0 ]
 
 jobs:
-  tests:
-    name: Run backend tests
+  ci-pipeline:
+    name: Continuous Integration Pipeline
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: 1. Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - name: 2. Configurar Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: 3. Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 4. Cache das dependências
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.npm
+            ~/.cache/pypoetry
+          key: ${{ runner.os }}-cache-${{ hashFiles('backend/poetry.lock', 'frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-cache-
+
+      - name: 5. Instalar dependências do Backend
         run: |
           python -m pip install --upgrade pip
-          if [ -f backend/requirements.txt ]; then python -m pip install -r backend/requirements.txt; fi
-          python -m pip install aiosqlite email-validator
-        env:
-          PIP_CACHE_DIR: ${{ runner.temp }}/pip-cache
+          pip install poetry
+          cd backend
+          poetry install
 
-      - name: Run backend tests
+      - name: 6. Instalar dependências do Frontend
+        run: |
+          cd frontend
+          npm ci
+
+      - name: 7. Executar pytask lint
         run: |
           cd backend
-          python -m pytest -q
+          poetry run task lint
+
+      - name: 8. Executar pytask test
+        run: |
+          cd backend
+          poetry run task test
+
+      - name: 9. Executar npm run lint
+        run: |
+          cd frontend
+          npm run lint
+
+      - name: 10. Executar npm run build
+        run: |
+          cd frontend
+          npm run build
+
+      - name: 11. Executar docker-compose build
+        run: |
+          docker-compose build
+
+      - name: 12. Subir os containers
+        run: |
+          docker-compose up -d
+
+      - name: 13. Aguardar o PostgreSQL ficar disponível
+        run: |
+          echo "Aguardando PostgreSQL..."
+          for i in {1..30}; do
+            if docker exec lista-postgres pg_isready -U postgres -d lista_telefonica; then
+              echo "PostgreSQL está pronto!"
+              break
+            fi
+            echo "Aguardando PostgreSQL ($i/30)..."
+            sleep 2
+          done
+
+      - name: 14. Aguardar o Backend responder
+        run: |
+          echo "Aguardando Backend..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8085/docs > /dev/null; then
+              echo "Backend está respondendo!"
+              break
+            fi
+            echo "Aguardando Backend ($i/30)..."
+            sleep 2
+          done
+
+      - name: 15. Executar um Health Check simples
+        run: |
+          curl -f http://localhost:8085/docs
+          curl -f http://localhost:8086
+
+      - name: 16. Encerrar tudo
+        if: always()
+        run: |
+          docker-compose down -v
