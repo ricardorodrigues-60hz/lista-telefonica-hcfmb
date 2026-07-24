@@ -66,13 +66,13 @@ jobs:
           cd frontend
           npm run build
 
-      - name: 11. Executar docker-compose build
+      - name: 11. Executar docker compose build
         run: |
-          docker-compose build
+          docker compose build
 
       - name: 12. Subir os containers
         run: |
-          docker-compose up -d
+          docker compose up -d
 
       - name: 13. Aguardar o PostgreSQL ficar disponível
         run: |
@@ -106,4 +106,4 @@ jobs:
       - name: 16. Encerrar tudo
         if: always()
         run: |
-          docker-compose down -v
+          docker compose down -v
