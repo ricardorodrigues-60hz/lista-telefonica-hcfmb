@@ -322,6 +322,16 @@ a {
   color: var(--color-info);
 }
 
+.badge-gestor {
+  background-color: #EDE7F6;
+  color: #673AB7;
+}
+
+.badge-consultor {
+  background-color: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
 .card-actions {
   display: flex;
   justify-content: flex-end;

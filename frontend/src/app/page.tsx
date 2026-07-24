@@ -4,11 +4,21 @@ import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { 
   Phone, Mail, Search, Plus, Edit2, Trash2, Cloud, CloudOff, 
-  RefreshCw, LogIn, LogOut, Shield, Info, Wifi, WifiOff, X
+  RefreshCw, LogIn, LogOut, Shield, Info, Wifi, WifiOff, X, Users, User, UserPlus
 } from 'lucide-react';
 import { db, type LocalContato } from '../db/db';
 
 const API_BASE = 'http://localhost:8085/api';
+
+interface Usuario {
+  id: string;
+  nome: string;
+  email: string;
+  papel: 'GESTOR' | 'CONSULTOR';
+  criado_em: string;
+  atualizado_em: string;
+  excluido: boolean;
+}
 
 export default function Home() {
   // Utility: read from localStorage safely (SSR-safe)
@@ -16,6 +26,9 @@ export default function Home() {
     if (typeof window === 'undefined') return null;
     return localStorage.getItem(key);
   }
+
+  // Navigation tab state
+  const [activeTab, setActiveTab] = useState<'contatos' | 'usuarios'>('contatos');
 
   // Authentication states (lazy init from localStorage)
   const [token, setToken] = useState<string | null>(() => getStoredValue('access_token'));
@@ -35,17 +48,33 @@ export default function Home() {
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'warning' | 'error', text: string } | null>(null);
   
-  // Search and Filter states
+  // Search and Filter states (Contatos)
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'todos' | 'institucional' | 'publico'>('todos');
   
-  // Form modal state (for creation/edition)
+  // Form modal state (for contact creation/edition)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingContactId, setEditingContactId] = useState<string | null>(null);
   const [formNome, setFormNome] = useState('');
   const [formTelefone, setFormTelefone] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formTipo, setFormTipo] = useState<'institucional' | 'publico'>('publico');
+
+  // Users Management state
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [loadingUsuarios, setLoadingUsuarios] = useState(false);
+  const [usuariosError, setUsuariosError] = useState<string | null>(null);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userFilterRole, setUserFilterRole] = useState<'todos' | 'GESTOR' | 'CONSULTOR'>('todos');
+
+  // User Modal state
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [userFormNome, setUserFormNome] = useState('');
+  const [userFormEmail, setUserFormEmail] = useState('');
+  const [userFormSenha, setUserFormSenha] = useState('');
+  const [userFormPapel, setUserFormPapel] = useState<'GESTOR' | 'CONSULTOR'>('CONSULTOR');
+  const [userModalError, setUserModalError] = useState<string | null>(null);
   
   // Fetch current contacts from local IndexedDB using Dexie
   const localContacts = useLiveQuery(
@@ -59,7 +88,6 @@ export default function Home() {
   // Setup connection listeners
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      
       const handleOnline = () => {
         setIsOnline(true);
         triggerSync();
@@ -77,7 +105,7 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch from server when online & authenticated
+  // Fetch contacts from server when online & authenticated
   useEffect(() => {
     if (token && isOnline) {
       loadContactsFromServer();
@@ -85,9 +113,15 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, isOnline]);
 
+  // Fetch users from server when activeTab === 'usuarios' and role is GESTOR
+  useEffect(() => {
+    if (token && isOnline && userRole === 'GESTOR' && activeTab === 'usuarios') {
+      loadUsuariosFromServer();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, isOnline, userRole, activeTab]);
+
   async function handleLogout() {
-    // Revoga a sessão no servidor (rotação de refresh token).
-    // Best-effort: se o dispositivo estiver offline, apenas seguimos com a limpeza local.
     if (refreshToken) {
       try {
         await fetch(`${API_BASE}/auth/logout`, {
@@ -104,8 +138,9 @@ export default function Home() {
     setRefreshToken(null);
     setUserRole(null);
     setUserName('');
+    setActiveTab('contatos');
     localStorage.clear();
-    db.contatos.clear(); // Clear cache for security
+    db.contatos.clear();
   }
 
   async function loadContactsFromServer() {
@@ -121,20 +156,15 @@ export default function Home() {
       
       if (res.ok) {
         const data = await res.json();
-        // Clear all synced, then add new ones
         await db.transaction('rw', db.contatos, async () => {
-          // Keep unsynced local changes, delete rest
           const unsynced = await db.contatos.filter(c => !c.sincronizado).toArray();
           await db.contatos.clear();
           
-          // Re-insert unsynced
           for (const c of unsynced) {
             await db.contatos.put(c);
           }
           
-          // Insert ones from server (setting sync=true)
           for (const s of data) {
-            // Only insert if it doesn't clash with unsynced local version
             const local = await db.contatos.get(s.id);
             if (!local) {
               await db.contatos.put({
@@ -153,6 +183,35 @@ export default function Home() {
       }
     } catch (err) {
       console.error('Error fetching contacts from server:', err);
+    }
+  }
+
+  async function loadUsuariosFromServer() {
+    if (!token || userRole !== 'GESTOR') return;
+    setLoadingUsuarios(true);
+    setUsuariosError(null);
+    try {
+      const res = await fetch(`${API_BASE}/usuarios`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (res.status === 401) {
+        handleLogout();
+        return;
+      }
+
+      if (res.ok) {
+        const data = await res.json();
+        setUsuarios(data);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setUsuariosError(errData.detail || 'Falha ao carregar a lista de usuários.');
+      }
+    } catch (err) {
+      console.error('Error fetching usuarios:', err);
+      setUsuariosError('Não foi possível conectar ao servidor backend.');
+    } finally {
+      setLoadingUsuarios(false);
     }
   }
 
@@ -201,7 +260,6 @@ export default function Home() {
             const contact = await db.contatos.get(id);
             if (contact) {
               if (contact.excluido) {
-                // Delete physical local copy if it's marked soft delete and fully synced
                 await db.contatos.delete(id);
               } else {
                 await db.contatos.update(id, { sincronizado: true });
@@ -259,7 +317,7 @@ export default function Home() {
     }
   }
 
-  // CRUD actions
+  // Contact CRUD actions
   const openCreateModal = () => {
     setEditingContactId(null);
     setFormNome('');
@@ -295,13 +353,10 @@ export default function Home() {
       excluido: false
     };
     
-    // Save locally to IndexedDB
     await db.contatos.put(newContact);
     setIsModalOpen(false);
     
-    // Try to sync instantly if online
     if (isOnline) {
-      // If we are online, also hit the online direct CRUD endpoint
       try {
         const res = await fetch(`${API_BASE}/contatos/${id}`, {
           method: editingContactId ? 'PUT' : 'POST',
@@ -331,7 +386,6 @@ export default function Home() {
     
     const now = new Date().toISOString();
     
-    // Soft delete locally
     await db.contatos.update(id, { excluido: true, sincronizado: false, atualizado_em: now });
     
     if (isOnline) {
@@ -343,12 +397,103 @@ export default function Home() {
           }
         });
         if (res.ok) {
-          // Delete completely if server confirms
           await db.contatos.delete(id);
         }
       } catch (err) {
         console.warn("Direct online delete failed, queued for background sync", err);
       }
+    }
+  };
+
+  // User CRUD actions
+  const openCreateUserModal = () => {
+    setEditingUserId(null);
+    setUserFormNome('');
+    setUserFormEmail('');
+    setUserFormSenha('');
+    setUserFormPapel('CONSULTOR');
+    setUserModalError(null);
+    setIsUserModalOpen(true);
+  };
+
+  const openEditUserModal = (userItem: Usuario) => {
+    setEditingUserId(userItem.id);
+    setUserFormNome(userItem.nome);
+    setUserFormEmail(userItem.email);
+    setUserFormSenha('');
+    setUserFormPapel(userItem.papel);
+    setUserModalError(null);
+    setIsUserModalOpen(true);
+  };
+
+  const handleSaveUsuario = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUserModalError(null);
+
+    const isEdit = !!editingUserId;
+    const url = isEdit ? `${API_BASE}/usuarios/${editingUserId}` : `${API_BASE}/usuarios`;
+    const method = isEdit ? 'PUT' : 'POST';
+
+    const payload: Record<string, any> = {
+      nome: userFormNome,
+      papel: userFormPapel,
+    };
+
+    if (!isEdit) {
+      payload.email = userFormEmail;
+      payload.senha = userFormSenha;
+    } else if (userFormSenha) {
+      payload.senha = userFormSenha;
+    }
+
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        setIsUserModalOpen(false);
+        await loadUsuariosFromServer();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        const errorMsg = typeof errData.detail === 'string'
+          ? errData.detail
+          : (Array.isArray(errData.detail) && errData.detail.length > 0 && errData.detail[0].msg
+              ? errData.detail[0].msg
+              : 'Falha ao salvar usuário.');
+        setUserModalError(errorMsg);
+      }
+    } catch (err) {
+      console.error('Error saving user:', err);
+      setUserModalError('Erro de conexão ao salvar usuário.');
+    }
+  };
+
+  const handleDeleteUsuario = async (userId: string, targetUserName: string) => {
+    if (!confirm(`Deseja realmente excluir o usuário ${targetUserName}?`)) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/usuarios/${userId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (res.ok) {
+        await loadUsuariosFromServer();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.detail || 'Não foi possível excluir o usuário.');
+      }
+    } catch (err) {
+      console.error('Error deleting user:', err);
+      alert('Erro de conexão ao tentar excluir usuário.');
     }
   };
 
@@ -364,13 +509,23 @@ export default function Home() {
     return matchesSearch && matchesType;
   }).sort((a, b) => a.nome.localeCompare(b.nome));
 
+  // Filtered usuarios
+  const filteredUsuarios = usuarios.filter(u => {
+    const matchesSearch = 
+      u.nome.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+      u.email.toLowerCase().includes(userSearchQuery.toLowerCase());
+      
+    const matchesRole = userFilterRole === 'todos' || u.papel === userFilterRole;
+    
+    return matchesSearch && matchesRole;
+  }).sort((a, b) => a.nome.localeCompare(b.nome));
+
   // Render Login screen if not authenticated
   if (!token) {
     return (
       <div className="login-container">
         <form className="login-card" onSubmit={handleLogin}>
           <div className="login-header">
-            {/* Using the UNESP/HCFMB Portal logo */}
             <img src="https://portal.hcfmb.unesp.br/imagem/logo.png" alt="HCFMB UNESP Logo" />
             <h2 className="login-title">Aciono Você</h2>
             <p className="login-subtitle">Acesso Restrito à Lista Telefônica</p>
@@ -436,10 +591,26 @@ export default function Home() {
         </div>
         
         <div className="sidebar-menu">
-          <div className="menu-item active">
+          <div 
+            className={`menu-item ${activeTab === 'contatos' ? 'active' : ''}`}
+            onClick={() => setActiveTab('contatos')}
+          >
             <Phone size={18} />
             <span>Lista Telefônica</span>
           </div>
+
+          {userRole === 'GESTOR' && (
+            <div 
+              className={`menu-item ${activeTab === 'usuarios' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab('usuarios');
+                loadUsuariosFromServer();
+              }}
+            >
+              <Users size={18} />
+              <span>Gestão de Usuários</span>
+            </div>
+          )}
           
           <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <div style={{ padding: '8px 16px', fontSize: '12px', borderTop: '1px solid var(--color-border)' }}>
@@ -447,7 +618,7 @@ export default function Home() {
                 {isOnline ? <Wifi size={14} /> : <WifiOff size={14} />}
                 <span>{isOnline ? 'Dispositivo Online' : 'Modo Offline Ativo'}</span>
               </div>
-              {pendingSyncCount > 0 && (
+              {activeTab === 'contatos' && pendingSyncCount > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', color: 'var(--color-warning)' }}>
                   <Cloud size={14} className="syncing-animate" />
                   <span>{pendingSyncCount} pendente(s)</span>
@@ -469,13 +640,13 @@ export default function Home() {
           <div className="header-brand">
             <img src="https://portal.hcfmb.unesp.br/imagem/logo.png" alt="HCFMB logo" className="header-logo" />
             <div className="header-title-container">
-              <h1>Lista Telefônica</h1>
+              <h1>{activeTab === 'contatos' ? 'Lista Telefônica' : 'Gestão de Usuários'}</h1>
               <p>HCFMB - Hospital das Clínicas de Botucatu</p>
             </div>
           </div>
           
           <div style={{ display: 'flex', gap: '8px' }}>
-            {pendingSyncCount > 0 && isOnline && (
+            {activeTab === 'contatos' && pendingSyncCount > 0 && isOnline && (
               <button 
                 className="btn btn-secondary" 
                 onClick={triggerSync} 
@@ -487,16 +658,23 @@ export default function Home() {
               </button>
             )}
             
-            {userRole === 'GESTOR' && (
+            {activeTab === 'contatos' && userRole === 'GESTOR' && (
               <button className="btn btn-primary" onClick={openCreateModal}>
                 <Plus size={16} />
                 Novo Contato
               </button>
             )}
+
+            {activeTab === 'usuarios' && userRole === 'GESTOR' && (
+              <button className="btn btn-primary" onClick={openCreateUserModal}>
+                <UserPlus size={16} />
+                Novo Usuário
+              </button>
+            )}
           </div>
         </header>
 
-        {syncMessage && (
+        {syncMessage && activeTab === 'contatos' && (
           <div className={`alert alert-${syncMessage.type}`}>
             <Info size={16} />
             <span>{syncMessage.text}</span>
@@ -512,103 +690,212 @@ export default function Home() {
         {!isOnline && (
           <div className="alert alert-warning">
             <WifiOff size={16} />
-            <span>Operando em modo offline. Alterações serão guardadas localmente e enviadas ao servidor quando a conexão retornar.</span>
+            <span>
+              {activeTab === 'contatos'
+                ? 'Operando em modo offline. Alterações serão guardadas localmente e enviadas ao servidor quando a conexão retornar.'
+                : 'Operando em modo offline. A gestão de usuários necessita de conexão com o servidor.'}
+            </span>
           </div>
         )}
 
-        {/* Search & Filtering */}
-        <section className="search-container">
-          <div className="search-input-wrapper">
-            <Search size={18} className="search-icon" />
-            <input 
-              type="text" 
-              className="search-input" 
-              placeholder="Buscar por nome, telefone ou email..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button 
-              className={`btn ${filterType === 'todos' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setFilterType('todos')}
-              style={{ padding: '8px 16px', fontSize: '13px' }}
-            >
-              Todos
-            </button>
-            <button 
-              className={`btn ${filterType === 'institucional' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setFilterType('institucional')}
-              style={{ padding: '8px 16px', fontSize: '13px' }}
-            >
-              Institucional
-            </button>
-            <button 
-              className={`btn ${filterType === 'publico' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setFilterType('publico')}
-              style={{ padding: '8px 16px', fontSize: '13px' }}
-            >
-              Público
-            </button>
-          </div>
-        </section>
-
-        {/* Contacts Cards Display */}
-        <section className="contacts-grid">
-          {filteredContacts.length === 0 ? (
-            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: '#8c8c8c' }}>
-              Nenhum contato encontrado.
-            </div>
-          ) : (
-            filteredContacts.map(c => (
-              <div className="card" key={c.id}>
-                {!c.sincronizado && (
-                  <div className="sync-indicator" title="Pendente de sincronização">
-                    <CloudOff size={16} />
-                  </div>
-                )}
-                
-                <div className="card-main">
-                  <div className="icon-wrapper">
-                    <Phone size={22} />
-                  </div>
-                  <div className="card-info">
-                    <h3 className="card-title">{c.nome}</h3>
-                    <p className="card-subtitle" style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
-                      {c.telefone}
-                    </p>
-                    {c.email && (
-                      <p className="card-subtitle" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Mail size={12} />
-                        {c.email}
-                      </p>
-                    )}
-                    <span className={`card-badge badge-${c.tipo_numero}`}>
-                      {c.tipo_numero}
-                    </span>
-                  </div>
-                </div>
-                
-                {userRole === 'GESTOR' && (
-                  <div className="card-actions">
-                    <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => openEditModal(c)}>
-                      <Edit2 size={12} />
-                      Editar
-                    </button>
-                    <button className="btn btn-danger" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => handleDeleteContact(c.id, c.nome)}>
-                      <Trash2 size={12} />
-                      Excluir
-                    </button>
-                  </div>
-                )}
+        {/* TAB 1: CONTATOS */}
+        {activeTab === 'contatos' && (
+          <>
+            <section className="search-container">
+              <div className="search-input-wrapper">
+                <Search size={18} className="search-icon" />
+                <input 
+                  type="text" 
+                  className="search-input" 
+                  placeholder="Buscar por nome, telefone ou email..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
               </div>
-            ))
-          )}
-        </section>
+              
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className={`btn ${filterType === 'todos' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setFilterType('todos')}
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                >
+                  Todos
+                </button>
+                <button 
+                  className={`btn ${filterType === 'institucional' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setFilterType('institucional')}
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                >
+                  Institucional
+                </button>
+                <button 
+                  className={`btn ${filterType === 'publico' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setFilterType('publico')}
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                >
+                  Público
+                </button>
+              </div>
+            </section>
+
+            <section className="contacts-grid">
+              {filteredContacts.length === 0 ? (
+                <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: '#8c8c8c' }}>
+                  Nenhum contato encontrado.
+                </div>
+              ) : (
+                filteredContacts.map(c => (
+                  <div className="card" key={c.id}>
+                    {!c.sincronizado && (
+                      <div className="sync-indicator" title="Pendente de sincronização">
+                        <CloudOff size={16} />
+                      </div>
+                    )}
+                    
+                    <div className="card-main">
+                      <div className="icon-wrapper">
+                        <Phone size={22} />
+                      </div>
+                      <div className="card-info">
+                        <h3 className="card-title">{c.nome}</h3>
+                        <p className="card-subtitle" style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
+                          {c.telefone}
+                        </p>
+                        {c.email && (
+                          <p className="card-subtitle" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Mail size={12} />
+                            {c.email}
+                          </p>
+                        )}
+                        <span className={`card-badge badge-${c.tipo_numero}`}>
+                          {c.tipo_numero}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {userRole === 'GESTOR' && (
+                      <div className="card-actions">
+                        <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => openEditModal(c)}>
+                          <Edit2 size={12} />
+                          Editar
+                        </button>
+                        <button className="btn btn-danger" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => handleDeleteContact(c.id, c.nome)}>
+                          <Trash2 size={12} />
+                          Excluir
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </section>
+          </>
+        )}
+
+        {/* TAB 2: USUÁRIOS */}
+        {activeTab === 'usuarios' && userRole === 'GESTOR' && (
+          <>
+            <section className="search-container">
+              <div className="search-input-wrapper">
+                <Search size={18} className="search-icon" />
+                <input 
+                  type="text" 
+                  className="search-input" 
+                  placeholder="Buscar usuário por nome ou e-mail..." 
+                  value={userSearchQuery}
+                  onChange={(e) => setUserSearchQuery(e.target.value)}
+                />
+              </div>
+              
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className={`btn ${userFilterRole === 'todos' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setUserFilterRole('todos')}
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                >
+                  Todos
+                </button>
+                <button 
+                  className={`btn ${userFilterRole === 'GESTOR' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setUserFilterRole('GESTOR')}
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                >
+                  Gestores
+                </button>
+                <button 
+                  className={`btn ${userFilterRole === 'CONSULTOR' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setUserFilterRole('CONSULTOR')}
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                >
+                  Consultores
+                </button>
+              </div>
+            </section>
+
+            {usuariosError && (
+              <div className="alert alert-error">
+                <Info size={16} />
+                <span>{usuariosError}</span>
+              </div>
+            )}
+
+            <section className="contacts-grid">
+              {loadingUsuarios ? (
+                <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: '#8c8c8c' }}>
+                  Carregando usuários...
+                </div>
+              ) : filteredUsuarios.length === 0 ? (
+                <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: '#8c8c8c' }}>
+                  Nenhum usuário encontrado.
+                </div>
+              ) : (
+                filteredUsuarios.map(u => (
+                  <div className="card" key={u.id}>
+                    <div className="card-main">
+                      <div 
+                        className="icon-wrapper" 
+                        style={{ 
+                          backgroundColor: u.papel === 'GESTOR' ? '#EDE7F6' : undefined, 
+                          color: u.papel === 'GESTOR' ? '#673AB7' : undefined 
+                        }}
+                      >
+                        <User size={22} />
+                      </div>
+                      <div className="card-info">
+                        <h3 className="card-title">{u.nome}</h3>
+                        <p className="card-subtitle" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Mail size={12} />
+                          {u.email}
+                        </p>
+                        <span className={`card-badge ${u.papel === 'GESTOR' ? 'badge-gestor' : 'badge-consultor'}`}>
+                          {u.papel}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="card-actions">
+                      <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => openEditUserModal(u)}>
+                        <Edit2 size={12} />
+                        Editar
+                      </button>
+                      <button 
+                        className="btn btn-danger" 
+                        style={{ padding: '6px 12px', fontSize: '12px' }} 
+                        onClick={() => handleDeleteUsuario(u.id, u.nome)}
+                      >
+                        <Trash2 size={12} />
+                        Excluir
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </section>
+          </>
+        )}
       </main>
 
-      {/* Creation/Edition Modal */}
+      {/* Contact Creation/Edition Modal */}
       {isModalOpen && (
         <div className="modal-overlay">
           <form className="modal-content" onSubmit={handleSaveContact}>
@@ -677,6 +964,97 @@ export default function Home() {
             
             <div className="modal-footer">
               <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>
+                Cancelar
+              </button>
+              <button type="submit" className="btn btn-primary">
+                Salvar
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* User Creation/Edition Modal */}
+      {isUserModalOpen && (
+        <div className="modal-overlay">
+          <form className="modal-content" onSubmit={handleSaveUsuario}>
+            <div className="modal-header">
+              <h3 className="modal-title">
+                {editingUserId ? 'Editar Usuário' : 'Adicionar Novo Usuário'}
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setIsUserModalOpen(false)} 
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              {userModalError && (
+                <div className="alert alert-error" style={{ margin: '0 0 16px 0' }}>
+                  <Info size={16} />
+                  <span>{userModalError}</span>
+                </div>
+              )}
+
+              <div className="form-group">
+                <label className="form-label">Nome Completo</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  required 
+                  placeholder="Ex: João da Silva"
+                  value={userFormNome}
+                  onChange={(e) => setUserFormNome(e.target.value)}
+                />
+              </div>
+              
+              <div className="form-group">
+                <label className="form-label">E-mail</label>
+                <input 
+                  type="email" 
+                  className="form-input" 
+                  required={!editingUserId}
+                  disabled={!!editingUserId}
+                  placeholder="Ex: joao.silva@hcfmb.unesp.br"
+                  value={userFormEmail}
+                  onChange={(e) => setUserFormEmail(e.target.value)}
+                />
+              </div>
+              
+              <div className="form-group">
+                <label className="form-label">
+                  {editingUserId ? 'Nova Senha (opcional)' : 'Senha'}
+                </label>
+                <input 
+                  type="password" 
+                  className="form-input" 
+                  required={!editingUserId}
+                  minLength={6}
+                  placeholder={editingUserId ? 'Deixe em branco para manter a senha atual' : 'Mínimo 6 caracteres'}
+                  value={userFormSenha}
+                  onChange={(e) => setUserFormSenha(e.target.value)}
+                />
+              </div>
+              
+              <div className="form-group">
+                <label className="form-label">Papel / Função</label>
+                <select 
+                  className="form-input" 
+                  style={{ appearance: 'auto' }}
+                  value={userFormPapel}
+                  onChange={(e) => setUserFormPapel(e.target.value as 'GESTOR' | 'CONSULTOR')}
+                >
+                  <option value="CONSULTOR">CONSULTOR (Apenas visualiza contatos)</option>
+                  <option value="GESTOR">GESTOR (Acesso total + Gestão de usuários)</option>
+                </select>
+              </div>
+            </div>
+            
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setIsUserModalOpen(false)}>
                 Cancelar
               </button>
               <button type="submit" className="btn btn-primary">
