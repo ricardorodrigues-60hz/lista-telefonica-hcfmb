@@ -1,24 +1,36 @@
-# 1. Imagem base oficial do Python optimizada (slim)
-FROM python:3.11-slim
+# Stage 1: Builder
+FROM python:3.11-slim AS builder
 
-# 2. Define o diretório de trabalho dentro do container
 WORKDIR /app
 
-# 3. Evita que o Python escreva arquivos .pyc e garante logs em tempo real
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# 4. Copia apenas o arquivo de dependências primeiro (otimização de cache do Docker)
-COPY requirements.txt /app/
+COPY requirements.txt .
 
-# 5. Instala as dependências
-RUN pip install --no-cache-dir -r requirements.txt
+# Instala dependências em diretório temporário
+RUN pip install --user --no-warn-script-location -r requirements.txt
 
-# 6. Copia o restante do código do backend para o container
-COPY . /app/
+# Stage 2: Runtime
+FROM python:3.11-slim
 
-# 7. Expõe a porta que o FastAPI vai rodar
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH=/root/.local/bin:$PATH
+
+# Copia apenas os pacotes Python instalados do builder
+COPY --from=builder /root/.local /root/.local
+
+# Copia código da aplicação
+COPY . .
+
 EXPOSE 8085
 
-# 8. Comando para iniciar a API (host 0.0.0.0 é obrigatório para aceitar conexões externas ao container)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8085"]
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
+    CMD python -c "import httpx; httpx.get('http://localhost:8085/docs', timeout=2)"
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8085", "--log-level", "info"]

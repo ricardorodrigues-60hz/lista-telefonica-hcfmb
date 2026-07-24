@@ -1,23 +1,45 @@
-# 1. Imagem base oficial do Node
+# Stage 1: Builder & Dependencies
+FROM node:20-alpine AS deps
+
+WORKDIR /app
+
+COPY package*.json ./
+
+RUN npm ci --only=production && \
+    npm cache clean --force
+
+# Stage 2: Build
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+
+RUN npm ci && \
+    npm cache clean --force
+
+COPY . .
+
+RUN npm run build
+
+# Stage 3: Runtime
 FROM node:20-alpine
 
 WORKDIR /app
 
-# 2. Copia os arquivos de definição de dependências
-COPY package*.json ./
+ENV NODE_ENV=production \
+    PORT=8086 \
+    NEXT_TELEMETRY_DISABLED=1
 
-# 3. Instala as dependências do projeto
-RUN npm install
-
-# 4. Copia o restante do código do Next.js
-COPY . .
-
-# Executa o build de produção do Next.js
-RUN npm run build
+# Copia arquivos necessários para produção
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
 
 EXPOSE 8086
 
-# 5. Define a porta do Next.js via variável de ambiente antes de rodar
-ENV PORT=8086
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:8086 || exit 1
 
 CMD ["npm", "run", "start"]

@@ -20,52 +20,48 @@ O software é responsável por gerenciar a persistência segura dos dados, contr
 - **Linguagem:** Python 3.11+
 - **Framework Web:** FastAPI 0.138
 - **ORM:** SQLAlchemy 2.0 (assíncrono)
-- **Banco de dados:** SQLite (`aiosqlite`) para dev, escalável para PostgreSQL (`asyncpg`)
+- **Banco de dados:** PostgreSQL (`asyncpg`) executado via Docker Container
 - **Migrações:** Alembic
 - **Validação de Dados:** Pydantic 2.13
 - **Testes:** pytest, pytest-asyncio, httpx
 
 ## Como Instalar e Executar
 
-Se preferir rodar o backend localmente sem o Docker Compose da raiz, siga os passos abaixo:
+O PostgreSQL é o único banco de dados suportado pelo projeto. Siga os passos para executar via Docker Compose:
 
 ### Pré-requisitos
-- Python 3.11 ou superior instalado.
-- Ambiente virtual (venv).
+- Docker e Docker Compose instalados.
 
-### Passo 1: Clonar o repositório
+### Executar via Docker Compose
+
 ```bash
-git clone https://github.com/seu-usuario/lista_telefonica_acionovoce.git
-cd lista_telefonica_acionovoce/backend
+docker-compose up -d --build
 ```
 
-### Passo 2: Instalar as dependências
-Crie um ambiente virtual, ative-o e instale os pacotes necessários:
+Isso iniciará o container do **PostgreSQL 16** e o serviço da API backend na porta `8085`.
+
+### Execução Local para Desenvolvimento (Com PostgreSQL em Docker)
+
+1. Suba o container do PostgreSQL:
 ```bash
-# Criar o ambiente virtual
+docker-compose up -d db
+```
+
+2. Instale as dependências Python:
+```bash
 python -m venv .venv
-
-# Ativar no Windows:
-.\.venv\Scripts\activate
-# Ativar no Linux/macOS:
-# source .venv/bin/activate
-
-# Instalar pacotes
+.\.venv\Scripts\activate  # Windows
 pip install -r requirements.txt
 ```
 
-### Passo 3: Inicializar banco de dados e migrações
+3. Execute as migrações do banco de dados:
 ```bash
 alembic upgrade head
 ```
 
-### Passo 4: Iniciar a aplicação
-Você pode rodar a aplicação habilitando a criação de dados de demonstração (seeds) na inicialização:
+4. Inicie a API com hot-reload:
 ```bash
-# No Windows PowerShell:
 $env:RUN_SEEDS="1"; uvicorn app.main:app --reload --port 8085
-
-# No Linux/Mac/Git Bash:
-RUN_SEEDS=1 uvicorn app.main:app --reload --port 8085
 ```
+
 A API estará disponível em `http://localhost:8085`. A documentação interativa pode ser vista em `http://localhost:8085/docs`.

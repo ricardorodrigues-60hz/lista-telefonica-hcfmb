@@ -14,11 +14,9 @@ Consolida o conteúdo de:
 # ---------------------------------------------------------------------------
 import asyncio
 import hashlib
-import importlib.util
 import logging
 import sys
 import uuid
-import warnings
 from datetime import datetime, timedelta, timezone
 from datetime import timezone as _tz
 from http import HTTPStatus
@@ -43,7 +41,9 @@ from sqlalchemy.orm import DeclarativeBase
 class Settings(BaseSettings):
     """Application settings."""
 
-    DATABASE_URL: str = 'sqlite+aiosqlite:///:memory:'
+    DATABASE_URL: str = (
+        'postgresql+asyncpg://postgres:postgres@localhost:5432/lista_telefonica'
+    )
     SECRET_KEY: str = 'super-secret-key-padrao-caso-nao-exista-no-env'
     ALGORITHM: str = 'HS256'
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
@@ -86,23 +86,7 @@ def configure_logging(level: int = logging.INFO) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _choose_database_url(url: str | None) -> str:
-    if not url:
-        return 'sqlite+aiosqlite:///:memory:'
-    if (
-        url.startswith('postgresql+asyncpg')
-        and importlib.util.find_spec('asyncpg') is None
-    ):
-        warnings.warn(
-            'asyncpg not installed;'
-            ' falling back to in-memory sqlite+aiosqlite for tests',
-            RuntimeWarning,
-        )
-        return 'sqlite+aiosqlite:///:memory:'
-    return url
-
-
-DATABASE_URL = _choose_database_url(settings.DATABASE_URL)
+DATABASE_URL = settings.DATABASE_URL
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 

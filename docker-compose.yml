@@ -1,44 +1,91 @@
+
+
 services:
+  # Banco de dados PostgreSQL
   db:
     image: postgres:16-alpine
-    container_name: lista_postgres_db
+    container_name: lista_telefonica_db
+    restart: unless-stopped
     environment:
+      POSTGRES_DB: lista_telefonica
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: admin
-      POSTGRES_DB: lista_telefonica
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
     ports:
-      - "5435:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d lista_telefonica"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - app_network
 
+  # Backend FastAPI
   backend:
-    build: ./backend
-    container_name: lista_backend_api
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lista_telefonica_backend
+    restart: unless-stopped
     ports:
       - "8085:8085"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:admin@db:5432/lista_telefonica
+      SECRET_KEY: sua-chave-secreta-muito-longa-e-aleatoria-aqui-mudar-em-producao
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      REFRESH_TOKEN_EXPIRE_DAYS: 7
+      API_PORT: 8085
+      API_BASE: /lista-telefonica
+      RUN_SEEDS: 1
+      PYTHONUNBUFFERED: 1
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app_network
     volumes:
       - ./backend/app:/app/app
-      - ./backend/tests:/app/tests
       - ./backend/migrations:/app/migrations
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:admin@db:5432/lista_telefonica
-      - RUN_SEEDS=1
-    depends_on:
-      - db
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8085/docs', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
+  # Frontend Next.js
   frontend:
-    build: ./frontend
-    container_name: lista_frontend_pwa
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: lista_telefonica_frontend
+    restart: unless-stopped
     ports:
-      - "8086:8086"
-    volumes:
-      - ./frontend:/app
-      - /app/.next
-      - /app/node_modules
+      - "3000:8086"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8085
+      NEXT_PUBLIC_API_URL: http://localhost:8085
+      NODE_ENV: production
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8086"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
 volumes:
   postgres_data:
+    driver: local
+
+networks:
+  app_network:
+    driver: bridge
