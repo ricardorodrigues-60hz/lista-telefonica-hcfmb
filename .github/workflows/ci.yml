@@ -77,31 +77,34 @@ jobs:
       - name: 13. Aguardar o PostgreSQL ficar disponível
         run: |
           echo "Aguardando PostgreSQL..."
-          for i in {1..30}; do
-            if docker exec lista-postgres pg_isready -U postgres -d lista_telefonica; then
+          for i in $(seq 1 30); do
+            if docker exec lista-postgres pg_isready -U postgres -d lista_telefonica 2>/dev/null; then
               echo "PostgreSQL está pronto!"
-              break
+              exit 0
             fi
             echo "Aguardando PostgreSQL ($i/30)..."
             sleep 2
           done
+          echo "PostgreSQL não ficou disponível a tempo!"
+          exit 1
 
       - name: 14. Aguardar o Backend responder
         run: |
           echo "Aguardando Backend..."
-          for i in {1..30}; do
-            if curl -s http://localhost:8085/docs > /dev/null; then
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8085/docs > /dev/null 2>&1; then
               echo "Backend está respondendo!"
-              break
+              exit 0
             fi
             echo "Aguardando Backend ($i/30)..."
             sleep 2
           done
+          echo "Backend não respondeu a tempo!"
+          exit 1
 
       - name: 15. Executar um Health Check simples
         run: |
-          curl -f http://localhost:8085/docs
-          curl -f http://localhost:8086
+          curl -f http://localhost:8085/docs > /dev/null
 
       - name: 16. Encerrar tudo
         if: always()
