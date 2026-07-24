@@ -274,24 +274,6 @@ async def async_verify_password(
 # ---------------------------------------------------------------------------
 
 
-# Contas padrão de desenvolvimento.
-# ATENÇÃO: desative essas senhas antes de qualquer deploy em produção.
-CONTAS_SEED = [
-    {
-        'nome': 'Gestor HCFMB',
-        'email': 'gestor@hcfmb.unesp.br',
-        'senha': 'gestor123',
-        'papel': 'GESTOR',
-    },
-    {
-        'nome': 'Consultor HCFMB',
-        'email': 'consultor@hcfmb.unesp.br',
-        'senha': 'consultor123',
-        'papel': 'CONSULTOR',
-    },
-]
-
-
 async def inicializar_banco():
 
     from app.modules.auth import RefreshToken  # noqa: F401
@@ -309,6 +291,7 @@ async def inicializar_banco():
 
 async def _seed_usuarios(db: _AsyncSession):
     from app.modules.usuarios import Usuario
+    from app.seeds_data import CONTAS_SEED
 
     for conta in CONTAS_SEED:
         res = await db.execute(
@@ -326,38 +309,22 @@ async def _seed_usuarios(db: _AsyncSession):
 
 async def _seed_contatos(db: _AsyncSession):
     from app.modules.contatos import Contato
+    from app.seeds_data import CONTATOS_MOCK
 
     res = await db.execute(_select(Contato))
     if not res.scalars().first():
         now = datetime.now(_tz.utc)
         contatos_iniciais = [
             Contato(
-                id='c1b50eb1-e283-4a11-8fa1-b65a440401b3',
-                nome='Portaria Principal',
-                telefone='(14) 3811-1500',
-                email='portaria@hcfmb.unesp.br',
-                tipo_numero='publico',
+                id=str(uuid.uuid4()),
+                nome=c['nome'],
+                telefone=c['telefone'],
+                email=c['email'],
+                tipo_numero=c['tipo_numero'],
                 atualizado_em=now,
                 excluido=False,
-            ),
-            Contato(
-                id='f90d1f88-124b-4b13-8cfb-5a1e2f4cb1f4',
-                nome='Pronto Socorro - Recepção',
-                telefone='(14) 3811-1600',
-                email='ps@hcfmb.unesp.br',
-                tipo_numero='institucional',
-                atualizado_em=now,
-                excluido=False,
-            ),
-            Contato(
-                id='d56e7f88-234b-4c13-8dfb-6a2e3f4cb1f5',
-                nome='Ambulatório de Especialidades',
-                telefone='(14) 3811-1700',
-                email='ambulatorio@hcfmb.unesp.br',
-                tipo_numero='institucional',
-                atualizado_em=now,
-                excluido=False,
-            ),
+            )
+            for c in CONTATOS_MOCK
         ]
         for c in contatos_iniciais:
             db.add(c)
