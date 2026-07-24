@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -434,7 +435,14 @@ export default function Home() {
     const url = isEdit ? `${API_BASE}/usuarios/${editingUserId}` : `${API_BASE}/usuarios`;
     const method = isEdit ? 'PUT' : 'POST';
 
-    const payload: Record<string, any> = {
+    interface UserPayload {
+      nome: string;
+      papel: 'GESTOR' | 'CONSULTOR';
+      email?: string;
+      senha?: string;
+    }
+
+    const payload: UserPayload = {
       nome: userFormNome,
       papel: userFormPapel,
     };
