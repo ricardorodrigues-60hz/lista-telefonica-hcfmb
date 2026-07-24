@@ -4,18 +4,26 @@ import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { 
   Phone, Mail, Search, Plus, Edit2, Trash2, Cloud, CloudOff, 
-  RefreshCw, LogIn, LogOut, Shield, User, Info, Wifi, WifiOff, X
+  RefreshCw, LogIn, LogOut, Shield, Info, Wifi, WifiOff, X
 } from 'lucide-react';
 import { db, type LocalContato } from '../db/db';
 
 const API_BASE = 'http://localhost:8085/api';
 
 export default function Home() {
-  // Authentication states
-  const [token, setToken] = useState<string | null>(null);
-  const [refreshToken, setRefreshToken] = useState<string | null>(null);
-  const [userRole, setUserRole] = useState<'GESTOR' | 'CONSULTOR' | null>(null);
-  const [userName, setUserName] = useState<string>('');
+  // Utility: read from localStorage safely (SSR-safe)
+  function getStoredValue(key: string): string | null {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem(key);
+  }
+
+  // Authentication states (lazy init from localStorage)
+  const [token, setToken] = useState<string | null>(() => getStoredValue('access_token'));
+  const [refreshToken, setRefreshToken] = useState<string | null>(() => getStoredValue('refresh_token'));
+  const [userRole, setUserRole] = useState<'GESTOR' | 'CONSULTOR' | null>(
+    () => getStoredValue('user_role') as 'GESTOR' | 'CONSULTOR' | null
+  );
+  const [userName, setUserName] = useState<string>(() => getStoredValue('user_name') || '');
   
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
@@ -23,7 +31,7 @@ export default function Home() {
   const [loginError, setLoginError] = useState('');
   
   // Sync and connection state
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState(() => typeof window !== 'undefined' ? navigator.onLine : true);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'warning' | 'error', text: string } | null>(null);
   
@@ -48,22 +56,9 @@ export default function Home() {
     () => db.contatos.filter(c => !c.sincronizado).count()
   ) || 0;
 
-  // Initialize Auth from localStorage and setup connection listeners
+  // Setup connection listeners
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const storedToken = localStorage.getItem('access_token');
-      const storedRefreshToken = localStorage.getItem('refresh_token');
-      const storedRole = localStorage.getItem('user_role') as 'GESTOR' | 'CONSULTOR' | null;
-      const storedName = localStorage.getItem('user_name') || '';
-      
-      if (storedToken) {
-        setToken(storedToken);
-        setRefreshToken(storedRefreshToken);
-        setUserRole(storedRole);
-        setUserName(storedName);
-      }
-      
-      setIsOnline(navigator.onLine);
       
       const handleOnline = () => {
         setIsOnline(true);
@@ -79,7 +74,16 @@ export default function Home() {
         window.removeEventListener('offline', handleOffline);
       };
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Fetch from server when online & authenticated
+  useEffect(() => {
+    if (token && isOnline) {
+      loadContactsFromServer();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, isOnline]);
 
   async function handleLogout() {
     // Revoga a sessão no servidor (rotação de refresh token).
@@ -216,6 +220,42 @@ export default function Home() {
       console.error(err);
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setLoginError('');
+    
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login: loginEmail, senha: loginPassword })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setToken(data.access_token);
+        setRefreshToken(data.refresh_token);
+        setUserRole(data.papel);
+        setUserName(data.nome);
+        
+        localStorage.setItem('access_token', data.access_token);
+        localStorage.setItem('refresh_token', data.refresh_token);
+        localStorage.setItem('user_role', data.papel);
+        localStorage.setItem('user_name', data.nome);
+      } else {
+        const errData = await res.json();
+        const errorMsg = typeof errData.detail === 'string' 
+          ? errData.detail 
+          : (Array.isArray(errData.detail) && errData.detail.length > 0 && errData.detail[0].msg
+              ? errData.detail[0].msg
+              : 'Falha na autenticação.');
+        setLoginError(errorMsg);
+      }
+    } catch {
+      setLoginError('Não foi possível conectar ao servidor backend.');
     }
   }
 
